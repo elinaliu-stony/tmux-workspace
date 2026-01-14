@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tmux Workspace</title>
+
+    <!-- GoldenLayout 1.5.9 -->
+    <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-base.css">
+    <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-dark-theme.css">
+
+    <!-- xterm.js -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <div id="header">
+        <h1>Tmux Workspace</h1>
+        <div id="controls">
+            <button id="btn-new-bash">+ Bash</button>
+            <button id="btn-new-tmux">+ Tmux</button>
+            <button id="btn-save-layout">Save Layout</button>
+        </div>
+    </div>
+
+    <!-- Tmux session selector modal -->
+    <div id="tmux-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Select Tmux Session</h3>
+            <div id="session-list"></div>
+            <button id="btn-close-modal">Cancel</button>
+        </div>
+    </div>
+
+    <!-- GoldenLayout container -->
+    <div id="layout-container"></div>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://golden-layout.com/files/latest/js/goldenlayout.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+    <script>
+        // Socket.IO connection
+        const socket = io();
+
+        // Track terminals by component ID
+        const terminals = new Map();
+        let terminalIdCounter = 0;
+
+        // GoldenLayout config
+        const defaultConfig = {
+            settings: {
+                showPopoutIcon: false,
+                showMaximiseIcon: true,
+                showCloseIcon: true
+            },
+            content: [{
+                type: 'row',
+                content: [{
+                    type: 'component',
+                    componentName: 'welcome',
+                    title: 'Welcome'
+                }]
+            }]
+        };
+
+        // Initialize GoldenLayout
+        let layout;
+        let savedLayout = null;
+
+        // Load saved layout from server
+        async function loadSavedLayout() {
+            try {
+                const res = await fetch('/api/layout');
+                const data = await res.json();
+                if (data && data.content) {
+                    return data;
+                }
+            } catch (e) {
+                console.error('Failed to load layout:', e);
+            }
+            return null;
+        }
+
+        // Save layout to server
+        async function saveLayout() {
+            if (!layout) return;
+            try {
+                const config = layout.toConfig();
+                await fetch('/api/layout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                console.log('Layout saved');
+            } catch (e) {
+                console.error('Failed to save layout:', e);
+            }
+        }
+
+        // Initialize app
+        async function init() {
+            savedLayout = await loadSavedLayout();
+            const config = savedLayout || defaultConfig;
+
+            layout = new GoldenLayout(config, $('#layout-container'));
+
+            // Register welcome component
+            layout.registerComponent('welcome', function(container) {
+                container.getElement().html(`
+                    <div class="welcome-panel">
+                        <h2>Tmux Workspace</h2>
+                        <p>Click <strong>+ Bash</strong> to open a new bash terminal.</p>
+                        <p>Click <strong>+ Tmux</strong> to attach to a tmux session.</p>
+                        <p>Drag tabs to rearrange or split the view.</p>
+                    </div>
+                `);
+            });
+
+            // Register terminal component
+            layout.registerComponent('terminal', function(container, state) {
+                const termId = state.termId || `term-${++terminalIdCounter}`;
+                const termType = state.type || 'bash';
+                const session = state.session;
+                const window = state.window || 0;
+
+                const wrapper = $('<div class="terminal-wrapper"></div>');
+                container.getElement().append(wrapper);
+
+                // Create xterm instance
+                const term = new Terminal({
+                    cursorBlink: true,
+                    fontSize: 14,
+                    fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                    theme: {
+                        background: '#1e1e1e',
+                        foreground: '#cccccc',
+                        cursor: '#ffffff'
+                    }
+                });
+
+                const fitAddon = new FitAddon.FitAddon();
+                term.loadAddon(fitAddon);
+
+                // Store terminal info
+                terminals.set(termId, {
+                    term,
+                    fitAddon,
+                    container,
+                    type: termType,
+                    session,
+                    window,
+                    connected: false
+                });
+
+                // Open terminal when container is ready
+                container.on('open', function() {
+                    term.open(wrapper[0]);
+                    fitAddon.fit();
+
+                    // Connect via Socket.IO
+                    connectTerminal(termId, termType, session, window);
+                });
+
+                // Handle resize
+                container.on('resize', function() {
+                    fitAddon.fit();
+                    if (terminals.get(termId)?.connected) {
+                        socket.emit('terminal_resize', {
+                            rows: term.rows,
+                            cols: term.cols
+                        });
+                    }
+                });
+
+                // Handle close
+                container.on('destroy', function() {
+                    term.dispose();
+                    terminals.delete(termId);
+                    // Layout will auto-save on change
+                });
+
+                // Send input to server
+                term.onData(function(data) {
+                    if (terminals.get(termId)?.connected) {
+                        socket.emit('terminal_input', data);
+                    }
+                });
+
+                // Update state for persistence
+                container.setState({
+                    termId,
+                    type: termType,
+                    session,
+                    window
+                });
+            });
+
+            layout.init();
+
+            // Auto-save layout on changes
+            layout.on('stateChanged', function() {
+                // Debounce saves
+                clearTimeout(layout._saveTimeout);
+                layout._saveTimeout = setTimeout(saveLayout, 500);
+            });
+
+            // Handle window resize
+            $(window).resize(function() {
+                layout.updateSize();
+            });
+        }
+
+        // Connect terminal to server
+        function connectTerminal(termId, type, session, window) {
+            const termInfo = terminals.get(termId);
+            if (!termInfo) return;
+
+            socket.emit('open_terminal', {
+                type,
+                session,
+                window
+            });
+
+            termInfo.connected = true;
+            termInfo.term.focus();
+        }
+
+        // Socket.IO event handlers
+        socket.on('terminal_output', function(data) {
+            // Send to all connected terminals (we only have one connection per socket)
+            terminals.forEach((info) => {
+                if (info.connected) {
+                    info.term.write(data);
+                }
+            });
+        });
+
+        socket.on('terminal_ready', function() {
+            console.log('Terminal ready');
+            // Trigger resize to sync dimensions
+            terminals.forEach((info) => {
+                if (info.connected) {
+                    info.fitAddon.fit();
+                    socket.emit('terminal_resize', {
+                        rows: info.term.rows,
+                        cols: info.term.cols
+                    });
+                }
+            });
+        });
+
+        socket.on('terminal_closed', function() {
+            console.log('Terminal closed');
+            terminals.forEach((info) => {
+                info.connected = false;
+            });
+        });
+
+        socket.on('terminal_error', function(data) {
+            console.error('Terminal error:', data.error);
+        });
+
+        // Add new bash terminal
+        function addBashTerminal() {
+            const newItem = {
+                type: 'component',
+                componentName: 'terminal',
+                title: 'Bash',
+                componentState: {
+                    type: 'bash',
+                    termId: `term-${++terminalIdCounter}`
+                }
+            };
+
+            // Add to layout
+            if (layout.root.contentItems.length > 0) {
+                layout.root.contentItems[0].addChild(newItem);
+            } else {
+                layout.root.addChild({
+                    type: 'row',
+                    content: [newItem]
+                });
+            }
+        }
+
+        // Show tmux session modal
+        async function showTmuxModal() {
+            const modal = $('#tmux-modal');
+            const list = $('#session-list');
+            list.empty();
+
+            try {
+                const res = await fetch('/api/sessions');
+                const sessions = await res.json();
+
+                if (sessions.length === 0) {
+                    list.html('<p class="no-sessions">No tmux sessions found. Create one with: tmux new -s mysession</p>');
+                } else {
+                    sessions.forEach(session => {
+                        const item = $(`
+                            <div class="session-item" data-session="${session.name}">
+                                <span class="session-name">${session.name}</span>
+                                <span class="session-info">${session.windows} window(s) ${session.attached ? '(attached)' : ''}</span>
+                            </div>
+                        `);
+                        item.on('click', function() {
+                            addTmuxTerminal(session.name);
+                            modal.addClass('hidden');
+                        });
+                        list.append(item);
+                    });
+                }
+            } catch (e) {
+                list.html('<p class="error">Failed to load sessions</p>');
+            }
+
+            modal.removeClass('hidden');
+        }
+
+        // Add tmux terminal
+        function addTmuxTerminal(sessionName, windowIdx = 0) {
+            const newItem = {
+                type: 'component',
+                componentName: 'terminal',
+                title: `tmux: ${sessionName}`,
+                componentState: {
+                    type: 'tmux',
+                    session: sessionName,
+                    window: windowIdx,
+                    termId: `term-${++terminalIdCounter}`
+                }
+            };
+
+            if (layout.root.contentItems.length > 0) {
+                layout.root.contentItems[0].addChild(newItem);
+            } else {
+                layout.root.addChild({
+                    type: 'row',
+                    content: [newItem]
+                });
+            }
+        }
+
+        // Event listeners
+        $(document).ready(function() {
+            init();
+
+            $('#btn-new-bash').on('click', addBashTerminal);
+            $('#btn-new-tmux').on('click', showTmuxModal);
+            $('#btn-close-modal').on('click', function() {
+                $('#tmux-modal').addClass('hidden');
+            });
+            $('#btn-save-layout').on('click', saveLayout);
+
+            // Close modal on outside click
+            $('#tmux-modal').on('click', function(e) {
+                if (e.target === this) {
+                    $(this).addClass('hidden');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

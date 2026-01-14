@@ -1,0 +1,278 @@
+/* Dark theme for Tmux Workspace */
+
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1e1e1e;
+    color: #cccccc;
+}
+
+/* Header */
+#header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    background: #252526;
+    border-bottom: 1px solid #3c3c3c;
+    height: 48px;
+}
+
+#header h1 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+    color: #ffffff;
+}
+
+#controls {
+    display: flex;
+    gap: 8px;
+}
+
+#controls button {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s;
+}
+
+#btn-new-bash {
+    background: #0e639c;
+    color: #ffffff;
+}
+
+#btn-new-bash:hover {
+    background: #1177bb;
+}
+
+#btn-new-tmux {
+    background: #3c3c3c;
+    color: #ffffff;
+}
+
+#btn-new-tmux:hover {
+    background: #4e4e4e;
+}
+
+#btn-save-layout {
+    background: #2d2d2d;
+    color: #888888;
+}
+
+#btn-save-layout:hover {
+    background: #3c3c3c;
+    color: #cccccc;
+}
+
+/* Layout container */
+#layout-container {
+    position: absolute;
+    top: 48px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
+/* GoldenLayout dark theme overrides */
+.lm_goldenlayout {
+    background: #1e1e1e;
+}
+
+.lm_header {
+    height: 28px !important;
+    background: #252526 !important;
+}
+
+.lm_tab {
+    background: #2d2d2d !important;
+    color: #888888 !important;
+    border: none !important;
+    margin-right: 1px !important;
+    font-size: 12px !important;
+    padding: 4px 25px 4px 10px !important;
+}
+
+.lm_tab.lm_active {
+    background: #1e1e1e !important;
+    color: #ffffff !important;
+}
+
+.lm_tab:hover {
+    color: #ffffff !important;
+}
+
+.lm_close_tab {
+    top: 6px !important;
+    right: 6px !important;
+    width: 14px !important;
+    height: 14px !important;
+}
+
+.lm_content {
+    background: #1e1e1e !important;
+    border: none !important;
+}
+
+.lm_splitter {
+    background: #3c3c3c !important;
+}
+
+.lm_splitter:hover {
+    background: #0e639c !important;
+}
+
+/* Terminal wrapper */
+.terminal-wrapper {
+    width: 100%;
+    height: 100%;
+    padding: 4px;
+    background: #1e1e1e;
+}
+
+.terminal-wrapper .xterm {
+    height: 100%;
+}
+
+.terminal-wrapper .xterm-viewport {
+    overflow-y: auto !important;
+}
+
+/* Welcome panel */
+.welcome-panel {
+    padding: 40px;
+    text-align: center;
+}
+
+.welcome-panel h2 {
+    margin: 0 0 20px 0;
+    color: #ffffff;
+    font-weight: 500;
+}
+
+.welcome-panel p {
+    margin: 10px 0;
+    color: #888888;
+    line-height: 1.6;
+}
+
+.welcome-panel strong {
+    color: #0e639c;
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: #252526;
+    border-radius: 8px;
+    padding: 20px;
+    min-width: 300px;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-content h3 {
+    margin: 0 0 16px 0;
+    color: #ffffff;
+    font-weight: 500;
+}
+
+#session-list {
+    margin-bottom: 16px;
+}
+
+.session-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: #2d2d2d;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.session-item:hover {
+    background: #3c3c3c;
+}
+
+.session-name {
+    color: #ffffff;
+    font-weight: 500;
+}
+
+.session-info {
+    color: #888888;
+    font-size: 12px;
+}
+
+.no-sessions, .error {
+    color: #888888;
+    text-align: center;
+    padding: 20px;
+}
+
+.error {
+    color: #f44747;
+}
+
+#btn-close-modal {
+    width: 100%;
+    padding: 10px;
+    background: #3c3c3c;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#btn-close-modal:hover {
+    background: #4e4e4e;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #3c3c3c;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #4e4e4e;
+}
