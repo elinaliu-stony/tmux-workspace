@@ -6,15 +6,16 @@ import struct
 import fcntl
 import termios
 import signal
+import threading
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
 import database
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'tmux-workspace-secret'
-socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins='*')
+socketio = SocketIO(app, async_mode='threading', cors_allowed_origins='*')
 
-# Track active PTY sessions: {sid: {'fd': fd, 'pid': pid, 'type': 'tmux'|'bash'}}
+# Track active PTY sessions: {sid: {termId: {'fd': fd, 'pid': pid, ...}}}
 terminals = {}
 
 # --- HTTP Routes ---
@@ -29,9 +30,10 @@ def get_sessions():
     try:
         result = subprocess.run(
             ['tmux', 'list-sessions', '-F', '#{session_name}:#{session_windows}:#{session_attached}'],
-            capture_output=True, text=True
+            capture_output=True, text=True, timeout=5
         )
         if result.returncode != 0:
+            print(f"tmux list-sessions failed: {result.stderr}")
             return jsonify([])
 
         sessions = []
@@ -46,6 +48,9 @@ def get_sessions():
                     'attached': parts[2] == '1'
                 })
         return jsonify(sessions)
+    except subprocess.TimeoutExpired:
+        print("tmux list-sessions timed out")
+        return jsonify([])
     except Exception as e:
         print(f"Error listing sessions: {e}")
         return jsonify([])
@@ -112,12 +117,19 @@ def on_disconnect():
 def on_open_terminal(data):
     """Open a new terminal (tmux session or bash)."""
     sid = request.sid
+    term_id = data.get('termId', 'default')
     terminal_type = data.get('type', 'bash')
     session = data.get('session')
     window = data.get('window', 0)
 
-    # Clean up existing terminal for this session
-    cleanup_terminal(sid)
+    print(f"open_terminal: sid={sid}, termId={term_id}, type={terminal_type}")
+
+    # Clean up existing terminal with same termId
+    cleanup_terminal(sid, term_id)
+
+    # Initialize sid dict if needed
+    if sid not in terminals:
+        terminals[sid] = {}
 
     try:
         # Create PTY
@@ -125,6 +137,7 @@ def on_open_terminal(data):
 
         if pid == 0:
             # Child process
+            os.environ['TERM'] = 'xterm-256color'
             if terminal_type == 'tmux' and session:
                 os.execlp('tmux', 'tmux', 'attach-session', '-t', f'{session}:{window}')
             else:
@@ -137,7 +150,7 @@ def on_open_terminal(data):
             flags = fcntl.fcntl(fd, fcntl.F_GETFL)
             fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
-            terminals[sid] = {
+            terminals[sid][term_id] = {
                 'fd': fd,
                 'pid': pid,
                 'type': terminal_type,
@@ -146,23 +159,27 @@ def on_open_terminal(data):
             }
 
             # Start reading from PTY
-            socketio.start_background_task(read_pty, sid, fd)
-            emit('terminal_ready', {'status': 'ok'})
+            socketio.start_background_task(read_pty, sid, term_id, fd)
+            emit('terminal_ready', {'status': 'ok', 'termId': term_id})
+            print(f"Terminal ready: sid={sid}, termId={term_id}")
 
     except Exception as e:
         print(f"Error opening terminal: {e}")
-        emit('terminal_error', {'error': str(e)})
+        emit('terminal_error', {'error': str(e), 'termId': term_id})
 
 @socketio.on('terminal_input')
 def on_terminal_input(data):
     """Send input to terminal."""
     sid = request.sid
-    if sid not in terminals:
+    term_id = data.get('termId', 'default') if isinstance(data, dict) else 'default'
+    input_data = data.get('data', data) if isinstance(data, dict) else data
+
+    if sid not in terminals or term_id not in terminals[sid]:
         return
 
-    fd = terminals[sid]['fd']
+    fd = terminals[sid][term_id]['fd']
     try:
-        os.write(fd, data.encode('utf-8'))
+        os.write(fd, input_data.encode('utf-8'))
     except Exception as e:
         print(f"Error writing to PTY: {e}")
 
@@ -170,10 +187,12 @@ def on_terminal_input(data):
 def on_terminal_resize(data):
     """Resize terminal."""
     sid = request.sid
-    if sid not in terminals:
+    term_id = data.get('termId', 'default')
+
+    if sid not in terminals or term_id not in terminals[sid]:
         return
 
-    fd = terminals[sid]['fd']
+    fd = terminals[sid][term_id]['fd']
     rows = data.get('rows', 24)
     cols = data.get('cols', 80)
 
@@ -183,16 +202,19 @@ def on_terminal_resize(data):
     except Exception as e:
         print(f"Error resizing PTY: {e}")
 
-def read_pty(sid, fd):
+def read_pty(sid, term_id, fd):
     """Background task to read from PTY and send to client."""
-    while sid in terminals and terminals[sid]['fd'] == fd:
+    while sid in terminals and term_id in terminals[sid] and terminals[sid][term_id]['fd'] == fd:
         try:
             ready, _, _ = select.select([fd], [], [], 0.1)
             if ready:
                 try:
                     data = os.read(fd, 4096)
                     if data:
-                        socketio.emit('terminal_output', data.decode('utf-8', errors='replace'), to=sid)
+                        socketio.emit('terminal_output', {
+                            'termId': term_id,
+                            'data': data.decode('utf-8', errors='replace')
+                        }, to=sid)
                     else:
                         # EOF
                         break
@@ -203,25 +225,42 @@ def read_pty(sid, fd):
             break
 
     # Terminal closed
-    socketio.emit('terminal_closed', {}, to=sid)
-    cleanup_terminal(sid)
+    socketio.emit('terminal_closed', {'termId': term_id}, to=sid)
+    cleanup_terminal(sid, term_id)
 
-def cleanup_terminal(sid):
-    """Clean up terminal resources."""
+def cleanup_terminal(sid, term_id=None):
+    """Clean up terminal resources. If term_id is None, clean all for sid."""
     if sid not in terminals:
         return
 
-    terminal = terminals.pop(sid, None)
-    if terminal:
-        try:
-            os.close(terminal['fd'])
-        except:
-            pass
-        try:
-            os.kill(terminal['pid'], signal.SIGTERM)
-        except:
-            pass
+    if term_id is not None:
+        # Clean specific terminal
+        terminal = terminals[sid].pop(term_id, None)
+        if terminal:
+            try:
+                os.close(terminal['fd'])
+            except:
+                pass
+            try:
+                os.kill(terminal['pid'], signal.SIGTERM)
+            except:
+                pass
+        # Remove sid if no more terminals
+        if not terminals[sid]:
+            del terminals[sid]
+    else:
+        # Clean all terminals for sid
+        for tid, terminal in list(terminals[sid].items()):
+            try:
+                os.close(terminal['fd'])
+            except:
+                pass
+            try:
+                os.kill(terminal['pid'], signal.SIGTERM)
+            except:
+                pass
+        del terminals[sid]
 
 if __name__ == '__main__':
     print("Starting Tmux Workspace on http://localhost:5001")
-    socketio.run(app, host='0.0.0.0', port=5001, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5001, debug=True, allow_unsafe_werkzeug=True)

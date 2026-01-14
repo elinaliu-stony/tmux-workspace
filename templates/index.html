@@ -174,6 +174,7 @@
                     fitAddon.fit();
                     if (terminals.get(termId)?.connected) {
                         socket.emit('terminal_resize', {
+                            termId,
                             rows: term.rows,
                             cols: term.cols
                         });
@@ -190,7 +191,10 @@
                 // Send input to server
                 term.onData(function(data) {
                     if (terminals.get(termId)?.connected) {
-                        socket.emit('terminal_input', data);
+                        socket.emit('terminal_input', {
+                            termId,
+                            data
+                        });
                     }
                 });
 
@@ -227,50 +231,61 @@
                 return;
             }
 
-            console.log('Emitting open_terminal');
+            console.log('Emitting open_terminal with termId:', termId);
             socket.emit('open_terminal', {
+                termId,
                 type,
                 session,
                 window
             });
 
-            termInfo.connected = true;
+            // Don't set connected yet - wait for terminal_ready
             termInfo.term.focus();
         }
 
         // Socket.IO event handlers
         socket.on('terminal_output', function(data) {
-            // Send to all connected terminals (we only have one connection per socket)
-            terminals.forEach((info) => {
-                if (info.connected) {
-                    info.term.write(data);
-                }
-            });
+            const termId = data.termId;
+            const output = data.data;
+            const termInfo = terminals.get(termId);
+            // Write output even before connected=true to avoid dropping early output
+            if (termInfo) {
+                termInfo.term.write(output);
+            }
         });
 
-        socket.on('terminal_ready', function() {
-            console.log('Terminal ready');
-            // Trigger resize to sync dimensions
-            terminals.forEach((info) => {
-                if (info.connected) {
-                    info.fitAddon.fit();
-                    socket.emit('terminal_resize', {
-                        rows: info.term.rows,
-                        cols: info.term.cols
-                    });
-                }
-            });
+        socket.on('terminal_ready', function(data) {
+            const termId = data.termId;
+            console.log('Terminal ready:', termId);
+            const termInfo = terminals.get(termId);
+            if (termInfo) {
+                termInfo.connected = true;
+                termInfo.fitAddon.fit();
+                socket.emit('terminal_resize', {
+                    termId,
+                    rows: termInfo.term.rows,
+                    cols: termInfo.term.cols
+                });
+            }
         });
 
-        socket.on('terminal_closed', function() {
-            console.log('Terminal closed');
-            terminals.forEach((info) => {
-                info.connected = false;
-            });
+        socket.on('terminal_closed', function(data) {
+            const termId = data.termId;
+            console.log('Terminal closed:', termId);
+            const termInfo = terminals.get(termId);
+            if (termInfo) {
+                termInfo.connected = false;
+                termInfo.term.write('\r\n[Terminal closed]\r\n');
+            }
         });
 
         socket.on('terminal_error', function(data) {
-            console.error('Terminal error:', data.error);
+            const termId = data.termId;
+            console.error('Terminal error:', termId, data.error);
+            const termInfo = terminals.get(termId);
+            if (termInfo) {
+                termInfo.term.write(`\r\n[Error: ${data.error}]\r\n`);
+            }
         });
 
         // Add new bash terminal
