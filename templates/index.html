@@ -9,8 +9,8 @@
     <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-base.css">
     <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-dark-theme.css">
 
-    <!-- xterm.js -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+    <!-- xterm.js 4.x (better CDN support) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@4.19.0/css/xterm.css">
 
     <!-- Custom styles -->
     <link rel="stylesheet" href="/static/css/style.css">
@@ -41,8 +41,8 @@
     <!-- Scripts -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://golden-layout.com/files/latest/js/goldenlayout.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm@4.19.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.5.0/lib/xterm-addon-fit.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
     <script>
@@ -125,6 +125,7 @@
 
             // Register terminal component
             layout.registerComponent('terminal', function(container, state) {
+                console.log('Terminal component created:', state);
                 const termId = state.termId || `term-${++terminalIdCounter}`;
                 const termType = state.type || 'bash';
                 const session = state.session;
@@ -219,9 +220,14 @@
 
         // Connect terminal to server
         function connectTerminal(termId, type, session, window) {
+            console.log('connectTerminal:', termId, type, session, window);
             const termInfo = terminals.get(termId);
-            if (!termInfo) return;
+            if (!termInfo) {
+                console.log('Terminal not found:', termId);
+                return;
+            }
 
+            console.log('Emitting open_terminal');
             socket.emit('open_terminal', {
                 type,
                 session,
@@ -292,13 +298,16 @@
 
         // Show tmux session modal
         async function showTmuxModal() {
+            console.log('showTmuxModal called');
             const modal = $('#tmux-modal');
             const list = $('#session-list');
             list.empty();
 
             try {
+                console.log('Fetching sessions...');
                 const res = await fetch('/api/sessions');
                 const sessions = await res.json();
+                console.log('Sessions:', sessions);
 
                 if (sessions.length === 0) {
                     list.html('<p class="no-sessions">No tmux sessions found. Create one with: tmux new -s mysession</p>');
@@ -326,6 +335,7 @@
 
         // Add tmux terminal
         function addTmuxTerminal(sessionName, windowIdx = 0) {
+            console.log('addTmuxTerminal called:', sessionName, windowIdx);
             const newItem = {
                 type: 'component',
                 componentName: 'terminal',
@@ -350,10 +360,20 @@
 
         // Event listeners
         $(document).ready(function() {
-            init();
+            console.log('Document ready');
+            console.log('Terminal available:', typeof Terminal);
+            console.log('FitAddon available:', typeof FitAddon);
+            console.log('GoldenLayout available:', typeof GoldenLayout);
 
-            $('#btn-new-bash').on('click', addBashTerminal);
-            $('#btn-new-tmux').on('click', showTmuxModal);
+            // Attach click handlers BEFORE init (in case init fails)
+            $('#btn-new-bash').on('click', function() {
+                console.log('Bash button clicked');
+                addBashTerminal();
+            });
+            $('#btn-new-tmux').on('click', function() {
+                console.log('Tmux button clicked');
+                showTmuxModal();
+            });
             $('#btn-close-modal').on('click', function() {
                 $('#tmux-modal').addClass('hidden');
             });
@@ -365,6 +385,13 @@
                     $(this).addClass('hidden');
                 }
             });
+
+            // Initialize after handlers are set up
+            try {
+                init();
+            } catch (e) {
+                console.error('Init error:', e);
+            }
         });
     </script>
 </body>
