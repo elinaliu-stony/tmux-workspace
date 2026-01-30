@@ -635,9 +635,19 @@
             const machines = {
                 '192.168.68.51': { name: 'Mac Mini', color: '#ef4444' },
                 '192.168.68.64': { name: 'iMac', color: '#22c55e' },
-                'localhost': { name: 'Mac Mini', color: '#ef4444' },
-                '127.0.0.1': { name: 'Mac Mini', color: '#ef4444' }
+                'localhost': { name: 'Local', color: '#ef4444' },
+                '127.0.0.1': { name: 'Local', color: '#ef4444' }
             };
+
+            // Check port to distinguish between local servers
+            const port = window.location.port;
+            if (port === '5002' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+                machines['localhost'] = { name: 'Mac Mini', color: '#ef4444' };
+                machines['127.0.0.1'] = { name: 'Mac Mini', color: '#ef4444' };
+            } else if (port === '5003') {
+                machines['localhost'] = { name: 'bmidb0', color: '#6366f1' };
+                machines['127.0.0.1'] = { name: 'bmidb0', color: '#6366f1' };
+            }
 
             const host = window.location.hostname;
             const machine = machines[host] || { name: host, color: '#6366f1' };
