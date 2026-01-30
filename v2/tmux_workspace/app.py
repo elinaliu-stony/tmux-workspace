@@ -14,7 +14,7 @@ from datetime import datetime
 from flask import Flask, render_template, jsonify, request, redirect, make_response
 from flask_socketio import SocketIO, emit, disconnect
 from functools import wraps
-import database
+from . import database
 
 # --- Token Authentication ---
 TOKEN_ENABLED = True  # Will be set by --no-token flag
@@ -528,13 +528,23 @@ def cleanup_terminal(sid, term_id=None):
                 pass
         del terminals[sid]
 
-if __name__ == '__main__':
+def main():
+    """Main entry point for tmux-workspace command."""
     import argparse
+    global TOKEN_ENABLED
 
-    parser = argparse.ArgumentParser(description='Tmux Workspace v2')
-    parser.add_argument('--port', type=int, default=5002, help='Port to run on (default: 5002)')
-    parser.add_argument('--host', default='0.0.0.0', help='Host to bind to (default: 0.0.0.0)')
-    parser.add_argument('--no-token', action='store_true', help='Disable access token')
+    parser = argparse.ArgumentParser(
+        prog='tmux-workspace',
+        description='Web-based terminal manager with tmux integration'
+    )
+    parser.add_argument('--port', '-p', type=int, default=5002,
+                        help='Port to run on (default: 5002)')
+    parser.add_argument('--host', '-H', default='0.0.0.0',
+                        help='Host to bind to (default: 0.0.0.0)')
+    parser.add_argument('--no-token', action='store_true',
+                        help='Disable access token authentication')
+    parser.add_argument('--version', '-v', action='version',
+                        version='%(prog)s 2.0.0')
     args = parser.parse_args()
 
     # Set up signal handler for graceful shutdown
@@ -545,7 +555,7 @@ if __name__ == '__main__':
 
     # Print startup banner
     print("\n" + "=" * 60)
-    print("  Tmux Workspace v2 (with Groups)")
+    print("  Tmux Workspace")
     print("=" * 60)
     print(f"\n  Server running at:")
     print(f"    http://localhost:{args.port}/")
@@ -559,7 +569,12 @@ if __name__ == '__main__':
     print("=" * 60 + "\n")
 
     logger.info(f"Server starting on {args.host}:{args.port}")
-    logger.info(f"Access token: {ACCESS_TOKEN}")
+    if not args.no_token:
+        logger.info(f"Access token: {ACCESS_TOKEN}")
 
     # Run with debug=False to prevent double signal handlers
     socketio.run(app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True)
+
+
+if __name__ == '__main__':
+    main()
