@@ -23,6 +23,7 @@
             <button id="btn-new-bash">+ Bash</button>
             <button id="btn-new-tmux">+ Tmux</button>
         </div>
+        <div id="machine-label"></div>
     </div>
 
     <!-- Group Tabs Bar -->
@@ -624,7 +625,30 @@
 
             // Initialize
             loadGroups();
+
+            // Machine label - detect and display machine name
+            initMachineLabel();
         });
+
+        // Machine label feature
+        function initMachineLabel() {
+            const machines = {
+                '192.168.68.51': { name: 'Mac Mini', color: '#ef4444' },
+                '192.168.68.64': { name: 'iMac', color: '#22c55e' },
+                'localhost': { name: 'Mac Mini', color: '#ef4444' },
+                '127.0.0.1': { name: 'Mac Mini', color: '#ef4444' }
+            };
+
+            const host = window.location.hostname;
+            const machine = machines[host] || { name: host, color: '#6366f1' };
+
+            const label = document.getElementById('machine-label');
+            if (label) {
+                label.textContent = machine.name;
+                label.style.background = machine.color;
+                label.style.display = 'block';
+            }
+        }
     </script>
 </body>
 </html>

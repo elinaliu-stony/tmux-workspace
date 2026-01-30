@@ -46,6 +46,20 @@ html, body {
     transition: background 0.2s;
 }
 
+/* Machine label (upper right corner) */
+#machine-label {
+    display: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #ffffff;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-left: auto;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
 #btn-new-bash {
     background: #0e639c;
     color: #ffffff;
