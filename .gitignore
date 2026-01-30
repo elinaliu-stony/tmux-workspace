@@ -3,3 +3,5 @@ __pycache__/
 *.pyo
 *.db
 .DS_Store
+*.log
+logs/
