@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tmux Workspace v2</title>
+
+    <!-- GoldenLayout 1.5.9 -->
+    <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-base.css">
+    <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-dark-theme.css">
+
+    <!-- xterm.js 4.x -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@4.19.0/css/xterm.css">
+
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <div id="header">
+        <h1>Tmux Workspace</h1>
+        <div id="controls">
+            <button id="btn-new-bash">+ Bash</button>
+            <button id="btn-new-tmux">+ Tmux</button>
+        </div>
+    </div>
+
+    <!-- Group Tabs Bar -->
+    <div id="group-tabs-bar">
+        <div id="group-tabs"></div>
+        <button id="btn-add-group" title="Add Group">+</button>
+    </div>
+
+    <!-- Tmux session selector modal -->
+    <div id="tmux-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Select Tmux Session</h3>
+            <div id="session-list"></div>
+            <button id="btn-close-modal">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Rename group modal -->
+    <div id="rename-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Rename Group</h3>
+            <input type="text" id="rename-input" placeholder="Group name">
+            <div class="modal-buttons">
+                <button id="btn-rename-save">Save</button>
+                <button id="btn-rename-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GoldenLayout container -->
+    <div id="layout-container"></div>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://golden-layout.com/files/latest/js/goldenlayout.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm@4.19.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.5.0/lib/xterm-addon-fit.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+    <script>
+        // Socket.IO connection
+        const socket = io();
+
+        // Track terminals by component ID
+        const terminals = new Map();
+        let terminalIdCounter = Date.now(); // Use timestamp to avoid ID collisions across page reloads
+
+        // Groups state
+        let groups = [];
+        let activeGroupId = null;
+        let layout = null;
+
+        // Default GoldenLayout config for new groups
+        const defaultConfig = {
+            settings: {
+                showPopoutIcon: false,
+                showMaximiseIcon: true,
+                showCloseIcon: true
+            },
+            content: [{
+                type: 'row',
+                content: [{
+                    type: 'component',
+                    componentName: 'welcome',
+                    title: 'Welcome'
+                }]
+            }]
+        };
+
+        // --- Group Management ---
+
+        async function loadGroups() {
+            try {
+                const res = await fetch('/api/groups');
+                const data = await res.json();
+                groups = data.groups || [];
+                activeGroupId = data.activeGroup;
+
+                // Create default group if none exist
+                if (groups.length === 0) {
+                    await createGroup('Default');
+                    return loadGroups();
+                }
+
+                // Set active group if not set
+                if (!activeGroupId || !groups.find(g => g.id === activeGroupId)) {
+                    activeGroupId = groups[0].id;
+                    await setActiveGroup(activeGroupId);
+                }
+
+                renderGroupTabs();
+                await switchToGroup(activeGroupId);
+            } catch (e) {
+                console.error('Failed to load groups:', e);
+            }
+        }
+
+        async function createGroup(name) {
+            try {
+                const res = await fetch('/api/groups', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                const data = await res.json();
+                return data.id;
+            } catch (e) {
+                console.error('Failed to create group:', e);
+            }
+        }
+
+        async function renameGroup(groupId, name) {
+            try {
+                await fetch(`/api/groups/${groupId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+            } catch (e) {
+                console.error('Failed to rename group:', e);
+            }
+        }
+
+        async function deleteGroup(groupId) {
+            if (groups.length <= 1) {
+                alert('Cannot delete the last group');
+                return;
+            }
+            if (!confirm('Delete this group and all its terminals?')) {
+                return;
+            }
+            try {
+                await fetch(`/api/groups/${groupId}`, { method: 'DELETE' });
+                await loadGroups();
+            } catch (e) {
+                console.error('Failed to delete group:', e);
+            }
+        }
+
+        async function setActiveGroup(groupId) {
+            try {
+                await fetch('/api/groups/active', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groupId })
+                });
+            } catch (e) {
+                console.error('Failed to set active group:', e);
+            }
+        }
+
+        function renderGroupTabs() {
+            const container = $('#group-tabs');
+            container.empty();
+
+            groups.forEach(group => {
+                const tab = $(`
+                    <div class="group-tab ${group.id === activeGroupId ? 'active' : ''}" data-group-id="${group.id}">
+                        <span class="group-name">${group.name}</span>
+                        <span class="group-close" title="Delete group">&times;</span>
+                    </div>
+                `);
+
+                // Click to switch
+                tab.on('click', function(e) {
+                    if (!$(e.target).hasClass('group-close')) {
+                        switchToGroup(group.id);
+                    }
+                });
+
+                // Double-click to rename
+                tab.find('.group-name').on('dblclick', function() {
+                    showRenameModal(group.id, group.name);
+                });
+
+                // Delete button
+                tab.find('.group-close').on('click', function(e) {
+                    e.stopPropagation();
+                    deleteGroup(group.id);
+                });
+
+                container.append(tab);
+            });
+        }
+
+        async function switchToGroup(groupId) {
+            // Save current layout first
+            if (layout && activeGroupId) {
+                await saveLayout();
+            }
+
+            // Clean up existing terminals
+            cleanupAllTerminals();
+
+            // Destroy current layout
+            if (layout) {
+                layout.destroy();
+                layout = null;
+            }
+
+            activeGroupId = groupId;
+            await setActiveGroup(groupId);
+
+            // Update tab UI
+            $('.group-tab').removeClass('active');
+            $(`.group-tab[data-group-id="${groupId}"]`).addClass('active');
+
+            // Load layout for this group
+            await initLayout(groupId);
+        }
+
+        function cleanupAllTerminals() {
+            terminals.forEach((termInfo, termId) => {
+                if (termInfo.term) {
+                    termInfo.term.dispose();
+                }
+            });
+            terminals.clear();
+        }
+
+        // --- Layout Management ---
+
+        async function loadLayout(groupId) {
+            try {
+                const res = await fetch(`/api/groups/${groupId}/layout`);
+                const data = await res.json();
+                if (data && data.content) {
+                    return data;
+                }
+            } catch (e) {
+                console.error('Failed to load layout:', e);
+            }
+            return null;
+        }
+
+        async function saveLayout() {
+            if (!layout || !activeGroupId) return;
+            try {
+                const config = layout.toConfig();
+                await fetch(`/api/groups/${activeGroupId}/layout`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                console.log('Layout saved for group', activeGroupId);
+            } catch (e) {
+                console.error('Failed to save layout:', e);
+            }
+        }
+
+        async function initLayout(groupId) {
+            const savedLayout = await loadLayout(groupId);
+            const config = savedLayout || defaultConfig;
+
+            layout = new GoldenLayout(config, $('#layout-container'));
+
+            // Register welcome component
+            layout.registerComponent('welcome', function(container) {
+                container.getElement().html(`
+                    <div class="welcome-panel">
+                        <h2>Tmux Workspace</h2>
+                        <p>Click <strong>+ Bash</strong> to open a new bash terminal.</p>
+                        <p>Click <strong>+ Tmux</strong> to attach to a tmux session.</p>
+                        <p>Drag tabs to rearrange or split the view.</p>
+                    </div>
+                `);
+            });
+
+            // Register terminal component
+            layout.registerComponent('terminal', function(container, state) {
+                // Always generate fresh termId to avoid stale server state
+                const termId = `term-${++terminalIdCounter}`;
+                const termType = state.type || 'bash';
+                const session = state.session;
+                const windowIdx = state.window || 0;
+
+                const wrapper = $('<div class="terminal-wrapper"></div>');
+                container.getElement().append(wrapper);
+
+                // Create xterm instance
+                const term = new Terminal({
+                    cursorBlink: true,
+                    fontSize: 14,
+                    fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                    theme: {
+                        background: '#1e1e1e',
+                        foreground: '#cccccc',
+                        cursor: '#ffffff'
+                    }
+                });
+
+                const fitAddon = new FitAddon.FitAddon();
+                term.loadAddon(fitAddon);
+
+                // Store terminal info
+                const termInfo = {
+                    term,
+                    fitAddon,
+                    container,
+                    type: termType,
+                    session,
+                    window: windowIdx,
+                    connected: false
+                };
+                terminals.set(termId, termInfo);
+
+                // Reconnect function
+                function reconnect() {
+                    if (termInfo.connected) return;
+                    term.write('\r\n[Reconnecting...]\r\n');
+                    connectTerminal(termId, termType, session, windowIdx);
+                }
+                termInfo.reconnect = reconnect;
+
+                // Open terminal when container is ready
+                container.on('open', function() {
+                    term.open(wrapper[0]);
+                    fitAddon.fit();
+
+                    // Track active panel on focus
+                    const contentEl = container.getElement().closest('.lm_content');
+                    term.textarea.addEventListener('focus', function() {
+                        $('.lm_content').removeClass('panel-active');
+                        contentEl.addClass('panel-active');
+                    });
+
+                    connectTerminal(termId, termType, session, windowIdx);
+                });
+
+                // Handle resize
+                container.on('resize', function() {
+                    fitAddon.fit();
+                    if (terminals.get(termId)?.connected) {
+                        socket.emit('terminal_resize', {
+                            termId,
+                            rows: term.rows,
+                            cols: term.cols
+                        });
+                    }
+                });
+
+                // Handle close
+                container.on('destroy', function() {
+                    term.dispose();
+                    terminals.delete(termId);
+                });
+
+                // Send input to server with paste throttling
+                const CHUNK_SIZE = 1024;  // 1KB chunks
+                const CHUNK_DELAY = 10;   // 10ms between chunks
+                let pasteQueue = Promise.resolve();
+
+                term.onData(function(data) {
+                    if (!terminals.get(termId)?.connected) {
+                        reconnect();
+                        return;
+                    }
+
+                    // Small input (typing) - send immediately
+                    if (data.length <= CHUNK_SIZE) {
+                        socket.emit('terminal_input', { termId, data });
+                        return;
+                    }
+
+                    // Large input (paste) - chunk it
+                    pasteQueue = pasteQueue.then(() => {
+                        return new Promise(resolve => {
+                            let offset = 0;
+                            function sendChunk() {
+                                if (offset >= data.length) {
+                                    resolve();
+                                    return;
+                                }
+                                const chunk = data.slice(offset, offset + CHUNK_SIZE);
+                                socket.emit('terminal_input', { termId, data: chunk });
+                                offset += CHUNK_SIZE;
+                                setTimeout(sendChunk, CHUNK_DELAY);
+                            }
+                            sendChunk();
+                        });
+                    });
+                });
+
+                // Update state for persistence (save type/session, not termId since we regenerate it)
+                container.setState({
+                    type: termType,
+                    session,
+                    window: windowIdx
+                });
+            });
+
+            layout.init();
+
+            // Auto-save layout on changes
+            layout.on('stateChanged', function() {
+                clearTimeout(layout._saveTimeout);
+                layout._saveTimeout = setTimeout(saveLayout, 500);
+            });
+
+            // Handle window resize
+            $(window).off('resize.layout').on('resize.layout', function() {
+                if (layout) layout.updateSize();
+            });
+        }
+
+        // --- Terminal Connection ---
+
+        function connectTerminal(termId, type, session, windowIdx) {
+            const termInfo = terminals.get(termId);
+            if (!termInfo) return;
+
+            socket.emit('open_terminal', {
+                termId,
+                type,
+                session,
+                window: windowIdx
+            });
+
+            termInfo.term.focus();
+        }
+
+        // Socket.IO event handlers
+        socket.on('terminal_output', function(data) {
+            const termInfo = terminals.get(data.termId);
+            if (termInfo) {
+                termInfo.term.write(data.data);
+            }
+        });
+
+        socket.on('terminal_ready', function(data) {
+            const termInfo = terminals.get(data.termId);
+            if (termInfo) {
+                termInfo.connected = true;
+                termInfo.fitAddon.fit();
+                socket.emit('terminal_resize', {
+                    termId: data.termId,
+                    rows: termInfo.term.rows,
+                    cols: termInfo.term.cols
+                });
+            }
+        });
+
+        socket.on('terminal_closed', function(data) {
+            const termInfo = terminals.get(data.termId);
+            if (termInfo) {
+                termInfo.connected = false;
+                termInfo.term.write('\r\n[Terminal closed - press any key to reconnect]\r\n');
+            }
+        });
+
+        socket.on('terminal_error', function(data) {
+            const termInfo = terminals.get(data.termId);
+            if (termInfo) {
+                termInfo.term.write(`\r\n[Error: ${data.error}]\r\n`);
+            }
+        });
+
+        // --- UI Actions ---
+
+        function addBashTerminal() {
+            if (!layout) return;
+            const newItem = {
+                type: 'component',
+                componentName: 'terminal',
+                title: 'Bash',
+                componentState: {
+                    type: 'bash',
+                    termId: `term-${++terminalIdCounter}`
+                }
+            };
+
+            if (layout.root.contentItems.length > 0) {
+                layout.root.contentItems[0].addChild(newItem);
+            } else {
+                layout.root.addChild({
+                    type: 'row',
+                    content: [newItem]
+                });
+            }
+        }
+
+        async function showTmuxModal() {
+            const modal = $('#tmux-modal');
+            const list = $('#session-list');
+            list.empty();
+
+            try {
+                const res = await fetch('/api/sessions');
+                const sessions = await res.json();
+
+                if (sessions.length === 0) {
+                    list.html('<p class="no-sessions">No tmux sessions found. Create one with: tmux new -s mysession</p>');
+                } else {
+                    sessions.forEach(session => {
+                        const item = $(`
+                            <div class="session-item" data-session="${session.name}">
+                                <span class="session-name">${session.name}</span>
+                                <span class="session-info">${session.windows} window(s) ${session.attached ? '(attached)' : ''}</span>
+                            </div>
+                        `);
+                        item.on('click', function() {
+                            addTmuxTerminal(session.name);
+                            modal.addClass('hidden');
+                        });
+                        list.append(item);
+                    });
+                }
+            } catch (e) {
+                list.html('<p class="error">Failed to load sessions</p>');
+            }
+
+            modal.removeClass('hidden');
+        }
+
+        function addTmuxTerminal(sessionName, windowIdx = 0) {
+            if (!layout) return;
+            const newItem = {
+                type: 'component',
+                componentName: 'terminal',
+                title: `tmux: ${sessionName}`,
+                componentState: {
+                    type: 'tmux',
+                    session: sessionName,
+                    window: windowIdx,
+                    termId: `term-${++terminalIdCounter}`
+                }
+            };
+
+            if (layout.root.contentItems.length > 0) {
+                layout.root.contentItems[0].addChild(newItem);
+            } else {
+                layout.root.addChild({
+                    type: 'row',
+                    content: [newItem]
+                });
+            }
+        }
+
+        function showRenameModal(groupId, currentName) {
+            const modal = $('#rename-modal');
+            const input = $('#rename-input');
+            input.val(currentName);
+            input.data('group-id', groupId);
+            modal.removeClass('hidden');
+            input.focus().select();
+        }
+
+        async function handleRename() {
+            const input = $('#rename-input');
+            const groupId = input.data('group-id');
+            const newName = input.val().trim();
+
+            if (newName) {
+                await renameGroup(groupId, newName);
+                const group = groups.find(g => g.id === groupId);
+                if (group) group.name = newName;
+                renderGroupTabs();
+            }
+
+            $('#rename-modal').addClass('hidden');
+        }
+
+        // --- Event Listeners ---
+
+        $(document).ready(function() {
+            // Header buttons
+            $('#btn-new-bash').on('click', addBashTerminal);
+            $('#btn-new-tmux').on('click', showTmuxModal);
+
+            // Add group button
+            $('#btn-add-group').on('click', async function() {
+                const name = prompt('Enter group name:');
+                if (name && name.trim()) {
+                    const id = await createGroup(name.trim());
+                    await loadGroups();
+                    if (id) switchToGroup(id);
+                }
+            });
+
+            // Tmux modal
+            $('#btn-close-modal').on('click', function() {
+                $('#tmux-modal').addClass('hidden');
+            });
+            $('#tmux-modal').on('click', function(e) {
+                if (e.target === this) $(this).addClass('hidden');
+            });
+
+            // Rename modal
+            $('#btn-rename-save').on('click', handleRename);
+            $('#btn-rename-cancel').on('click', function() {
+                $('#rename-modal').addClass('hidden');
+            });
+            $('#rename-input').on('keypress', function(e) {
+                if (e.which === 13) handleRename();
+            });
+            $('#rename-modal').on('click', function(e) {
+                if (e.target === this) $(this).addClass('hidden');
+            });
+
+            // Initialize
+            loadGroups();
+        });
+    </script>
+</body>
+</html>

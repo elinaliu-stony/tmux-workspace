@@ -1,0 +1,418 @@
+/* Dark theme for Tmux Workspace v2 */
+
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1e1e1e;
+    color: #cccccc;
+}
+
+/* Header */
+#header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    background: #252526;
+    border-bottom: 1px solid #3c3c3c;
+    height: 48px;
+}
+
+#header h1 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+    color: #ffffff;
+}
+
+#controls {
+    display: flex;
+    gap: 8px;
+}
+
+#controls button {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s;
+}
+
+#btn-new-bash {
+    background: #0e639c;
+    color: #ffffff;
+}
+
+#btn-new-bash:hover {
+    background: #1177bb;
+}
+
+#btn-new-tmux {
+    background: #3c3c3c;
+    color: #ffffff;
+}
+
+#btn-new-tmux:hover {
+    background: #4e4e4e;
+}
+
+/* Group Tabs Bar */
+#group-tabs-bar {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    background: #1e1e1e;
+    border-bottom: 1px solid #3c3c3c;
+    height: 36px;
+    gap: 4px;
+}
+
+#group-tabs {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    flex: 1;
+}
+
+#group-tabs::-webkit-scrollbar {
+    height: 4px;
+}
+
+.group-tab {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    background: #2d2d2d;
+    border-radius: 4px 4px 0 0;
+    cursor: pointer;
+    font-size: 13px;
+    color: #888888;
+    transition: all 0.2s;
+    white-space: nowrap;
+    gap: 8px;
+    border-bottom: 2px solid transparent;
+}
+
+.group-tab:hover {
+    background: #3c3c3c;
+    color: #cccccc;
+}
+
+.group-tab.active {
+    background: #0e639c;
+    color: #ffffff;
+    border-bottom-color: #0e639c;
+}
+
+.group-name {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.group-close {
+    font-size: 16px;
+    line-height: 1;
+    opacity: 0;
+    transition: opacity 0.2s;
+    padding: 0 2px;
+}
+
+.group-tab:hover .group-close {
+    opacity: 0.6;
+}
+
+.group-close:hover {
+    opacity: 1 !important;
+    color: #f44747;
+}
+
+#btn-add-group {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: #3c3c3c;
+    color: #888888;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+#btn-add-group:hover {
+    background: #4e4e4e;
+    color: #ffffff;
+}
+
+/* Layout container - adjusted for group tabs */
+#layout-container {
+    position: absolute;
+    top: 84px; /* header (48px) + group tabs (36px) */
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
+/* GoldenLayout dark theme overrides */
+.lm_goldenlayout {
+    background: #1e1e1e;
+}
+
+.lm_header {
+    height: 28px !important;
+    background: #252526 !important;
+}
+
+.lm_tab {
+    background: #2d2d2d !important;
+    color: #888888 !important;
+    border: none !important;
+    margin-right: 1px !important;
+    font-size: 12px !important;
+    padding: 4px 25px 4px 10px !important;
+}
+
+.lm_tab.lm_active {
+    background: #1e1e1e !important;
+    color: #ffffff !important;
+}
+
+.lm_tab:hover {
+    color: #ffffff !important;
+}
+
+.lm_close_tab {
+    top: 6px !important;
+    right: 6px !important;
+    width: 14px !important;
+    height: 14px !important;
+}
+
+.lm_content {
+    background: #1e1e1e !important;
+    border: 1px solid transparent !important;
+    transition: border-color 0.15s ease;
+}
+
+/* Active panel highlight */
+.lm_content.panel-active {
+    border-color: #0e639c !important;
+}
+
+.lm_item_container:focus-within .lm_content {
+    border-color: #0e639c !important;
+}
+
+.lm_splitter {
+    background: #3c3c3c !important;
+}
+
+.lm_splitter:hover {
+    background: #0e639c !important;
+}
+
+/* Terminal wrapper */
+.terminal-wrapper {
+    width: 100%;
+    height: 100%;
+    padding: 4px;
+    background: #1e1e1e;
+}
+
+.terminal-wrapper .xterm {
+    height: 100%;
+}
+
+.terminal-wrapper .xterm-viewport {
+    overflow-y: auto !important;
+}
+
+/* Welcome panel */
+.welcome-panel {
+    padding: 40px;
+    text-align: center;
+}
+
+.welcome-panel h2 {
+    margin: 0 0 20px 0;
+    color: #ffffff;
+    font-weight: 500;
+}
+
+.welcome-panel p {
+    margin: 10px 0;
+    color: #888888;
+    line-height: 1.6;
+}
+
+.welcome-panel strong {
+    color: #0e639c;
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: #252526;
+    border-radius: 8px;
+    padding: 20px;
+    min-width: 300px;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-content h3 {
+    margin: 0 0 16px 0;
+    color: #ffffff;
+    font-weight: 500;
+}
+
+.modal-content input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #3c3c3c;
+    border-radius: 4px;
+    background: #1e1e1e;
+    color: #ffffff;
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+.modal-content input[type="text"]:focus {
+    outline: none;
+    border-color: #0e639c;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.modal-buttons button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#btn-rename-save {
+    background: #0e639c;
+    color: #ffffff;
+}
+
+#btn-rename-save:hover {
+    background: #1177bb;
+}
+
+#btn-rename-cancel {
+    background: #3c3c3c;
+    color: #ffffff;
+}
+
+#btn-rename-cancel:hover {
+    background: #4e4e4e;
+}
+
+#session-list {
+    margin-bottom: 16px;
+}
+
+.session-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: #2d2d2d;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.session-item:hover {
+    background: #3c3c3c;
+}
+
+.session-name {
+    color: #ffffff;
+    font-weight: 500;
+}
+
+.session-info {
+    color: #888888;
+    font-size: 12px;
+}
+
+.no-sessions, .error {
+    color: #888888;
+    text-align: center;
+    padding: 20px;
+}
+
+.error {
+    color: #f44747;
+}
+
+#btn-close-modal {
+    width: 100%;
+    padding: 10px;
+    background: #3c3c3c;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#btn-close-modal:hover {
+    background: #4e4e4e;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #3c3c3c;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #4e4e4e;
+}
