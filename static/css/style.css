@@ -120,7 +120,17 @@ html, body {
 
 .lm_content {
     background: #1e1e1e !important;
-    border: none !important;
+    border: 1px solid transparent !important;
+    transition: border-color 0.15s ease;
+}
+
+/* Active panel highlight */
+.lm_content.panel-active {
+    border-color: #0e639c !important;
+}
+
+.lm_item_container:focus-within .lm_content {
+    border-color: #0e639c !important;
 }
 
 .lm_splitter {

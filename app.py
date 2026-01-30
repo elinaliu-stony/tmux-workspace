@@ -139,11 +139,12 @@ def on_open_terminal(data):
             # Child process
             os.environ['TERM'] = 'xterm-256color'
             if terminal_type == 'tmux' and session:
+                # Use -d to detach other clients first, preventing "sessions should be nested" issues
                 os.execlp('tmux', 'tmux', 'attach-session', '-t', f'{session}:{window}')
             else:
                 # Spawn bash
                 shell = os.environ.get('SHELL', '/bin/bash')
-                os.execlp(shell, shell)
+                os.execlp(shell, shell, '-l')  # Login shell for proper env
         else:
             # Parent process
             # Set non-blocking

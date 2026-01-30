@@ -51,7 +51,27 @@
 
         // Track terminals by component ID
         const terminals = new Map();
-        let terminalIdCounter = 0;
+        let terminalIdCounter = Date.now(); // Use timestamp to avoid ID collisions across page reloads
+
+        // Extract max termId from saved layout to avoid collisions
+        function extractMaxTermId(config) {
+            let maxId = 0;
+            function traverse(item) {
+                if (item.componentState && item.componentState.termId) {
+                    const match = item.componentState.termId.match(/term-(\d+)/);
+                    if (match) {
+                        maxId = Math.max(maxId, parseInt(match[1], 10));
+                    }
+                }
+                if (item.content) {
+                    item.content.forEach(traverse);
+                }
+            }
+            if (config && config.content) {
+                config.content.forEach(traverse);
+            }
+            return maxId;
+        }
 
         // GoldenLayout config
         const defaultConfig = {
@@ -109,6 +129,12 @@
             savedLayout = await loadSavedLayout();
             const config = savedLayout || defaultConfig;
 
+            // Set counter higher than any existing termId to avoid collisions
+            const maxExisting = extractMaxTermId(config);
+            if (maxExisting >= terminalIdCounter) {
+                terminalIdCounter = maxExisting + 1;
+            }
+
             layout = new GoldenLayout(config, $('#layout-container'));
 
             // Register welcome component
@@ -126,10 +152,11 @@
             // Register terminal component
             layout.registerComponent('terminal', function(container, state) {
                 console.log('Terminal component created:', state);
-                const termId = state.termId || `term-${++terminalIdCounter}`;
+                // Always generate fresh termId on component creation to avoid stale server state
+                const termId = `term-${++terminalIdCounter}`;
                 const termType = state.type || 'bash';
                 const session = state.session;
-                const window = state.window || 0;
+                const windowIdx = state.window || 0;
 
                 const wrapper = $('<div class="terminal-wrapper"></div>');
                 container.getElement().append(wrapper);
@@ -150,23 +177,38 @@
                 term.loadAddon(fitAddon);
 
                 // Store terminal info
-                terminals.set(termId, {
+                const termInfo = {
                     term,
                     fitAddon,
                     container,
                     type: termType,
                     session,
-                    window,
+                    window: windowIdx,
                     connected: false
-                });
+                };
+                terminals.set(termId, termInfo);
+
+                // Reconnect function
+                function reconnect() {
+                    if (termInfo.connected) return;
+                    term.write('\r\n[Reconnecting...]\r\n');
+                    connectTerminal(termId, termType, session, windowIdx);
+                }
 
                 // Open terminal when container is ready
                 container.on('open', function() {
                     term.open(wrapper[0]);
                     fitAddon.fit();
 
+                    // Track active panel on focus
+                    const contentEl = container.getElement().closest('.lm_content');
+                    term.textarea.addEventListener('focus', function() {
+                        $('.lm_content').removeClass('panel-active');
+                        contentEl.addClass('panel-active');
+                    });
+
                     // Connect via Socket.IO
-                    connectTerminal(termId, termType, session, window);
+                    connectTerminal(termId, termType, session, windowIdx);
                 });
 
                 // Handle resize
@@ -188,22 +230,50 @@
                     // Layout will auto-save on change
                 });
 
-                // Send input to server
+                // Send input to server with paste throttling
+                const CHUNK_SIZE = 1024;  // 1KB chunks
+                const CHUNK_DELAY = 10;   // 10ms between chunks
+                let pasteQueue = Promise.resolve();
+
                 term.onData(function(data) {
-                    if (terminals.get(termId)?.connected) {
-                        socket.emit('terminal_input', {
-                            termId,
-                            data
-                        });
+                    if (!terminals.get(termId)?.connected) {
+                        reconnect();
+                        return;
                     }
+
+                    // Small input (typing) - send immediately
+                    if (data.length <= CHUNK_SIZE) {
+                        socket.emit('terminal_input', { termId, data });
+                        return;
+                    }
+
+                    // Large input (paste) - chunk it
+                    pasteQueue = pasteQueue.then(() => {
+                        return new Promise(resolve => {
+                            let offset = 0;
+                            function sendChunk() {
+                                if (offset >= data.length) {
+                                    resolve();
+                                    return;
+                                }
+                                const chunk = data.slice(offset, offset + CHUNK_SIZE);
+                                socket.emit('terminal_input', { termId, data: chunk });
+                                offset += CHUNK_SIZE;
+                                setTimeout(sendChunk, CHUNK_DELAY);
+                            }
+                            sendChunk();
+                        });
+                    });
                 });
 
-                // Update state for persistence
+                // Store reconnect function for external use
+                termInfo.reconnect = reconnect;
+
+                // Update state for persistence (save type/session, not termId since we regenerate it)
                 container.setState({
-                    termId,
                     type: termType,
                     session,
-                    window
+                    window: windowIdx
                 });
             });
 
@@ -275,7 +345,7 @@
             const termInfo = terminals.get(termId);
             if (termInfo) {
                 termInfo.connected = false;
-                termInfo.term.write('\r\n[Terminal closed]\r\n');
+                termInfo.term.write('\r\n[Terminal closed - press any key to reconnect]\r\n');
             }
         });
 
