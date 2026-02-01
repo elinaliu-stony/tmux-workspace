@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeX Workspace</title>
+
+    <!-- GoldenLayout 1.5.9 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/src/css/goldenlayout-base.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/src/css/goldenlayout-dark-theme.css">
+
+    <!-- CodeMirror 5 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/monokai.min.css">
+
+    <!-- xterm.js -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@4.19.0/css/xterm.css">
+
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <div id="header">
+        <h1>TeX Workspace</h1>
+        <div id="controls">
+            <button id="btn-open-dir" title="Open Directory" onclick="showOpenDirModal()">Open Directory</button>
+            <span id="current-dir"></span>
+            <span class="control-separator">|</span>
+            <button id="btn-new-bash" class="btn-terminal">+ Bash</button>
+            <button id="btn-new-tmux" class="btn-terminal btn-secondary">+ Tmux</button>
+            <span class="control-separator">|</span>
+            <button id="btn-new-web" class="btn-web">+ Web</button>
+        </div>
+    </div>
+
+    <!-- Web panel selector modal -->
+    <div id="web-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Open Web Panel</h3>
+            <div id="web-presets">
+                <div class="web-preset" data-url="https://chatgpt.com" data-name="ChatGPT">
+                    <span class="preset-icon">🤖</span>
+                    <span class="preset-name">ChatGPT</span>
+                </div>
+                <div class="web-preset" data-url="https://claude.ai" data-name="Claude">
+                    <span class="preset-icon">🧠</span>
+                    <span class="preset-name">Claude</span>
+                </div>
+                <div class="web-preset" data-url="https://gemini.google.com" data-name="Gemini">
+                    <span class="preset-icon">✨</span>
+                    <span class="preset-name">Gemini</span>
+                </div>
+                <div class="web-preset" data-url="https://www.google.com" data-name="Google">
+                    <span class="preset-icon">🔍</span>
+                    <span class="preset-name">Google</span>
+                </div>
+            </div>
+            <div class="web-custom">
+                <input type="text" id="web-url-input" placeholder="Or enter custom URL...">
+                <button id="btn-open-custom-url">Open</button>
+            </div>
+            <button id="btn-close-web-modal">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Tmux session selector modal -->
+    <div id="tmux-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Select Tmux Session</h3>
+            <div id="session-list"></div>
+            <button id="btn-close-tmux-modal">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Main container with sidebar and layout -->
+    <div id="main-container">
+        <!-- File Browser Sidebar -->
+        <div id="sidebar">
+            <div id="sidebar-header">
+                <span>Files</span>
+                <button id="btn-refresh" title="Refresh">↻</button>
+            </div>
+            <div id="file-tree"></div>
+        </div>
+
+        <!-- Resize handle -->
+        <div id="sidebar-resizer"></div>
+
+        <!-- GoldenLayout container -->
+        <div id="layout-container"></div>
+    </div>
+
+    <!-- Open Directory Modal -->
+    <div id="open-dir-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Open Directory</h3>
+            <input type="text" id="dir-path-input" placeholder="Enter directory path (e.g., ~/workspace/ip_writing)">
+            <div id="recent-dirs"></div>
+            <div class="modal-buttons">
+                <button id="btn-open-dir-confirm">Open</button>
+                <button id="btn-open-dir-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/dist/goldenlayout.min.js"></script>
+
+    <!-- PDF.js with text layer -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css">
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+
+    <!-- CodeMirror 5 -->
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/stex/stex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/closebrackets.min.js"></script>
+    <script>
+        window.codeMirrorReady = true;
+    </script>
+
+    <!-- xterm.js and Socket.IO -->
+    <script src="https://cdn.jsdelivr.net/npm/xterm@4.19.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.5.0/lib/xterm-addon-fit.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+    <script>
+        // Fallback for Open Directory button
+        function showOpenDirModal() {
+            if (typeof $ !== 'undefined') {
+                loadRecentDirectories();
+                $('#dir-path-input').val('');
+                $('#open-dir-modal').removeClass('hidden');
+                $('#dir-path-input').focus();
+            } else {
+                // jQuery not loaded, use vanilla JS
+                document.getElementById('open-dir-modal').classList.remove('hidden');
+                document.getElementById('dir-path-input').focus();
+            }
+        }
+
+        // Socket.IO connection
+        const socket = io();
+
+        // State
+        let layout = null;
+        let currentDir = null;
+        const openEditors = new Map(); // path -> {editor, container}
+        const terminals = new Map(); // termId -> {term, fitAddon, connected}
+        let terminalIdCounter = Date.now();
+
+        // Default GoldenLayout config
+        const defaultConfig = {
+            settings: {
+                showPopoutIcon: false,
+                showMaximiseIcon: true,
+                showCloseIcon: true
+            },
+            content: [{
+                type: 'row',
+                content: [{
+                    type: 'component',
+                    componentName: 'welcome',
+                    title: 'Welcome'
+                }]
+            }]
+        };
+
+        // --- File Tree ---
+
+        async function loadFileTree(path = '') {
+            const tree = $('#file-tree');
+
+            if (!currentDir) {
+                tree.html('<div class="empty-state">No directory opened.<br>Click "Open Directory" to start.</div>');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    tree.html(`<div class="error">${data.error}</div>`);
+                    return;
+                }
+
+                if (path === '') {
+                    tree.empty();
+                }
+
+                const container = path === '' ? tree : tree.find(`[data-path="${path}"] > .folder-children`);
+
+                if (path === '') {
+                    renderFileItems(container, data.files, '');
+                } else {
+                    container.empty();
+                    renderFileItems(container, data.files, path);
+                }
+
+            } catch (e) {
+                console.error('Failed to load files:', e);
+                tree.html('<div class="error">Failed to load files</div>');
+            }
+        }
+
+        function renderFileItems(container, files, parentPath) {
+            files.forEach(file => {
+                const item = $(`
+                    <div class="file-item ${file.isDirectory ? 'folder' : 'file'}" data-path="${file.path}">
+                        <div class="file-row">
+                            <span class="file-icon">${getFileIcon(file)}</span>
+                            <span class="file-name">${file.name}</span>
+                        </div>
+                        ${file.isDirectory ? '<div class="folder-children"></div>' : ''}
+                    </div>
+                `);
+
+                // Click handler
+                item.find('.file-row').on('click', function(e) {
+                    e.stopPropagation();
+
+                    if (file.isDirectory) {
+                        const children = item.find('> .folder-children');
+                        if (children.hasClass('expanded')) {
+                            children.removeClass('expanded').empty();
+                            item.find('> .file-row .file-icon').text('📁');
+                        } else {
+                            children.addClass('expanded');
+                            item.find('> .file-row .file-icon').text('📂');
+                            loadFileTree(file.path);
+                        }
+                    }
+                });
+
+                // Double-click to open files
+                item.find('.file-row').on('dblclick', function(e) {
+                    e.stopPropagation();
+                    if (!file.isDirectory) {
+                        openFile(file);
+                    }
+                });
+
+                container.append(item);
+            });
+        }
+
+        function getFileIcon(file) {
+            if (file.isDirectory) return '📁';
+            if (file.isPdf) return '📄';
+            if (file.isImage) return '🖼️';
+            if (file.name.endsWith('.tex')) return '📝';
+            if (file.name.endsWith('.bib')) return '📚';
+            return '📄';
+        }
+
+        // --- File Opening ---
+
+        function openFile(file) {
+            if (file.isText) {
+                openTextEditor(file.path, file.name);
+            } else if (file.isPdf) {
+                openPdfViewer(file.path, file.name);
+            } else if (file.isImage) {
+                openImageViewer(file.path, file.name);
+            }
+        }
+
+        function openTextEditor(path, name) {
+            if (!layout) return;
+
+            // Check if already open
+            const existing = findExistingTab('editor', path);
+            if (existing) {
+                existing.parent.setActiveContentItem(existing);
+                return;
+            }
+
+            const newItem = {
+                type: 'component',
+                componentName: 'editor',
+                title: name,
+                componentState: { path, name }
+            };
+
+            addToLayout(newItem);
+        }
+
+        function openPdfViewer(path, name) {
+            if (!layout) return;
+
+            // Check if already open
+            const existing = findExistingTab('pdf-viewer', path);
+            if (existing) {
+                existing.parent.setActiveContentItem(existing);
+                return;
+            }
+
+            const newItem = {
+                type: 'component',
+                componentName: 'pdf-viewer',
+                title: name,
+                componentState: { path, name }
+            };
+
+            addToLayout(newItem);
+        }
+
+        function openImageViewer(path, name) {
+            if (!layout) return;
+
+            const newItem = {
+                type: 'component',
+                componentName: 'image-viewer',
+                title: name,
+                componentState: { path, name }
+            };
+
+            addToLayout(newItem);
+        }
+
+        function findExistingTab(componentName, path) {
+            let found = null;
+            layout.root.getItemsByFilter(item => {
+                if (item.componentName === componentName &&
+                    item.config.componentState?.path === path) {
+                    found = item;
+                    return true;
+                }
+                return false;
+            });
+            return found;
+        }
+
+        function addToLayout(newItem) {
+            if (layout.root.contentItems.length > 0) {
+                // Find a stack to add to, or add to the first row
+                const stacks = layout.root.getItemsByType('stack');
+                if (stacks.length > 0) {
+                    stacks[0].addChild(newItem);
+                } else {
+                    layout.root.contentItems[0].addChild(newItem);
+                }
+            } else {
+                layout.root.addChild({
+                    type: 'row',
+                    content: [newItem]
+                });
+            }
+        }
+
+        // --- Layout Management ---
+
+        async function loadLayout() {
+            try {
+                const res = await fetch('/api/layout');
+                const data = await res.json();
+                if (data && data.content) {
+                    return data;
+                }
+            } catch (e) {
+                console.error('Failed to load layout:', e);
+            }
+            return null;
+        }
+
+        async function saveLayout() {
+            if (!layout) return;
+            try {
+                const config = layout.toConfig();
+                await fetch('/api/layout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+            } catch (e) {
+                console.error('Failed to save layout:', e);
+            }
+        }
+
+        async function initLayout() {
+            const savedLayout = await loadLayout();
+            const config = savedLayout || defaultConfig;
+
+            layout = new GoldenLayout(config, $('#layout-container'));
+
+            // Register welcome component
+            layout.registerComponent('welcome', function(container) {
+                container.getElement().html(`
+                    <div class="welcome-panel">
+                        <h2>TeX Workspace</h2>
+                        <p>Open a directory to browse LaTeX files.</p>
+                        <p>Double-click files to open them:</p>
+                        <ul>
+                            <li><strong>.tex, .bib</strong> files open in the editor</li>
+                            <li><strong>.pdf</strong> files open in the PDF viewer</li>
+                            <li><strong>.jpg, .png</strong> files open in the image viewer</li>
+                        </ul>
+                        <p>Press <strong>Ctrl+S</strong> to save edited files.</p>
+                    </div>
+                `);
+            });
+
+            // Register text editor component
+            layout.registerComponent('editor', function(container, state) {
+                const wrapper = $('<div class="editor-wrapper"></div>');
+                const statusBar = $('<div class="editor-status-bar"><span class="status-text">Loading...</span></div>');
+                wrapper.append(statusBar);
+                container.getElement().append(wrapper);
+
+                const path = state.path;
+                let editor = null;
+                let saving = false;
+                let autoSaveTimeout = null;
+                let lastSavedContent = '';
+
+                // Load file content
+                fetch(`/api/file?path=${encodeURIComponent(path)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            wrapper.prepend(`<div class="error">${data.error}</div>`);
+                            return;
+                        }
+
+                        const editorContainer = $('<textarea class="codemirror-textarea"></textarea>');
+                        wrapper.prepend(editorContainer);
+
+                        // Create CodeMirror 5 editor
+                        editor = CodeMirror.fromTextArea(editorContainer[0], {
+                            mode: 'stex',
+                            theme: 'monokai',
+                            lineNumbers: true,
+                            lineWrapping: true,
+                            matchBrackets: true,
+                            autoCloseBrackets: true,
+                            indentUnit: 4,
+                            tabSize: 4,
+                            indentWithTabs: false,
+                            extraKeys: {
+                                'Ctrl-S': saveFile,
+                                'Cmd-S': saveFile
+                            }
+                        });
+
+                        editor.setValue(data.content);
+                        lastSavedContent = data.content;
+                        statusBar.find('.status-text').text(path);
+
+                        // Auto-save on change (debounced 2 seconds)
+                        editor.on('change', function() {
+                            const currentContent = editor.getValue();
+                            if (currentContent !== lastSavedContent) {
+                                statusBar.find('.status-text').text(`${path} (modified)`);
+                                clearTimeout(autoSaveTimeout);
+                                autoSaveTimeout = setTimeout(() => {
+                                    saveFile();
+                                }, 2000);
+                            }
+                        });
+
+                        openEditors.set(path, {
+                            editor: editor,
+                            container: container
+                        });
+
+                        // Refresh on container resize
+                        container.on('resize', function() {
+                            setTimeout(() => editor.refresh(), 100);
+                        });
+
+                        // Initial refresh
+                        setTimeout(() => editor.refresh(), 100);
+                    })
+                    .catch(err => {
+                        wrapper.prepend(`<div class="error">Failed to load file: ${err}</div>`);
+                    });
+
+                async function saveFile() {
+                    if (!editor || saving) return;
+                    const content = editor.getValue();
+                    if (content === lastSavedContent) return; // No changes
+
+                    saving = true;
+                    statusBar.find('.status-text').text('Saving...');
+
+                    try {
+                        const res = await fetch('/api/file', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ path, content })
+                        });
+                        const result = await res.json();
+
+                        if (result.status === 'ok') {
+                            lastSavedContent = content;
+                            statusBar.find('.status-text').text(`Saved: ${path}`);
+                            setTimeout(() => {
+                                statusBar.find('.status-text').text(path);
+                            }, 2000);
+                        } else {
+                            statusBar.find('.status-text').text(`Error: ${result.error}`);
+                        }
+                    } catch (e) {
+                        statusBar.find('.status-text').text(`Error: ${e.message}`);
+                    }
+                    saving = false;
+                }
+
+                container.on('destroy', function() {
+                    clearTimeout(autoSaveTimeout);
+                    // Save before closing if modified
+                    if (editor && editor.getValue() !== lastSavedContent) {
+                        saveFile();
+                    }
+                    openEditors.delete(path);
+                    if (editor) {
+                        editor.toTextArea();
+                    }
+                });
+            });
+
+            // Register PDF viewer component - renders all pages with text selection
+            layout.registerComponent('pdf-viewer', function(container, state) {
+                const path = state.path;
+                const wrapper = $(`
+                    <div class="pdf-wrapper">
+                        <div class="pdf-toolbar">
+                            <button class="pdf-btn" data-action="zoom-out">−</button>
+                            <span class="pdf-zoom-level">100%</span>
+                            <button class="pdf-btn" data-action="zoom-in">+</button>
+                            <button class="pdf-btn" data-action="fit-width">Fit Width</button>
+                            <span class="pdf-separator">|</span>
+                            <span class="pdf-page-info">Page <span class="current-page">1</span> / <span class="total-pages">?</span></span>
+                        </div>
+                        <div class="pdf-container">
+                            <div class="pdf-pages"></div>
+                        </div>
+                    </div>
+                `);
+                container.getElement().append(wrapper);
+
+                const pagesContainer = wrapper.find('.pdf-pages');
+                const pdfContainer = wrapper.find('.pdf-container');
+                let pdfDoc = null;
+                let scale = 1.5;
+                let renderedPages = new Map();
+
+                // Load and render all pages
+                async function loadPdf() {
+                    try {
+                        const url = `/api/raw/${encodeURIComponent(path)}?t=${Date.now()}`;
+                        pdfDoc = await pdfjsLib.getDocument(url).promise;
+                        wrapper.find('.total-pages').text(pdfDoc.numPages);
+                        await renderAllPages();
+                    } catch (e) {
+                        console.error('Error loading PDF:', e);
+                        pagesContainer.html(`<div class="error">Failed to load PDF: ${e.message}</div>`);
+                    }
+                }
+
+                async function renderAllPages() {
+                    if (!pdfDoc) return;
+
+                    pagesContainer.empty();
+                    renderedPages.clear();
+
+                    const containerWidth = pdfContainer.width() - 60;
+
+                    for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+                        const page = await pdfDoc.getPage(pageNum);
+                        const viewport = page.getViewport({ scale: 1.0 });
+
+                        // Calculate scale to fit width
+                        const pageScale = scale * (containerWidth / viewport.width);
+                        const scaledViewport = page.getViewport({ scale: pageScale });
+
+                        // High-DPI
+                        const pixelRatio = window.devicePixelRatio || 1;
+                        const renderViewport = page.getViewport({ scale: pageScale * pixelRatio });
+
+                        // Create page wrapper
+                        const pageWrapper = $(`<div class="pdf-page" data-page="${pageNum}"></div>`);
+                        pageWrapper.css({
+                            width: scaledViewport.width + 'px',
+                            height: scaledViewport.height + 'px',
+                            position: 'relative',
+                            marginBottom: '20px'
+                        });
+
+                        // Create canvas
+                        const canvas = document.createElement('canvas');
+                        canvas.width = renderViewport.width;
+                        canvas.height = renderViewport.height;
+                        canvas.style.width = scaledViewport.width + 'px';
+                        canvas.style.height = scaledViewport.height + 'px';
+                        pageWrapper.append(canvas);
+
+                        // Create text layer
+                        const textLayer = $('<div class="textLayer"></div>');
+                        textLayer.css({
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            right: 0,
+                            bottom: 0,
+                            overflow: 'hidden',
+                            lineHeight: '1.0'
+                        });
+                        pageWrapper.append(textLayer);
+
+                        pagesContainer.append(pageWrapper);
+
+                        // Render canvas
+                        const ctx = canvas.getContext('2d');
+                        await page.render({
+                            canvasContext: ctx,
+                            viewport: renderViewport
+                        }).promise;
+
+                        // Render text layer for selection
+                        const textContent = await page.getTextContent();
+                        pdfjsLib.renderTextLayer({
+                            textContentSource: textContent,
+                            container: textLayer[0],
+                            viewport: scaledViewport,
+                            textDivs: []
+                        });
+
+                        renderedPages.set(pageNum, { canvas, textLayer, page });
+                    }
+
+                    updateZoomDisplay();
+                }
+
+                function updateZoomDisplay() {
+                    wrapper.find('.pdf-zoom-level').text(Math.round(scale * 100) + '%');
+                }
+
+                // Track current page on scroll
+                pdfContainer.on('scroll', function() {
+                    const scrollTop = pdfContainer.scrollTop();
+                    const pages = pagesContainer.find('.pdf-page');
+                    let currentPage = 1;
+
+                    pages.each(function(i) {
+                        const pageTop = $(this).position().top + scrollTop;
+                        if (scrollTop >= pageTop - 100) {
+                            currentPage = i + 1;
+                        }
+                    });
+
+                    wrapper.find('.current-page').text(currentPage);
+                });
+
+                // Toolbar actions
+                wrapper.find('.pdf-btn').on('click', function() {
+                    const action = $(this).data('action');
+                    switch (action) {
+                        case 'zoom-in':
+                            scale = Math.min(scale * 1.25, 5.0);
+                            renderAllPages();
+                            break;
+                        case 'zoom-out':
+                            scale = Math.max(scale / 1.25, 0.5);
+                            renderAllPages();
+                            break;
+                        case 'fit-width':
+                            scale = 1.0;
+                            renderAllPages();
+                            break;
+                    }
+                });
+
+                // Handle resize
+                let resizeTimeout;
+                container.on('resize', function() {
+                    clearTimeout(resizeTimeout);
+                    resizeTimeout = setTimeout(() => {
+                        if (pdfDoc) renderAllPages();
+                    }, 200);
+                });
+
+                // Auto-reload on file change
+                let lastMtime = null;
+                const checkInterval = setInterval(async () => {
+                    try {
+                        const res = await fetch(`/api/file-mtime?path=${encodeURIComponent(path)}`);
+                        const data = await res.json();
+                        if (data.mtime && lastMtime && data.mtime !== lastMtime) {
+                            console.log('PDF changed, reloading...');
+                            const scrollPos = pdfContainer.scrollTop();
+                            await loadPdf();
+                            pdfContainer.scrollTop(scrollPos);
+                        }
+                        lastMtime = data.mtime;
+                    } catch (e) {
+                        // Ignore errors
+                    }
+                }, 2000);
+
+                container.on('destroy', function() {
+                    clearInterval(checkInterval);
+                });
+
+                loadPdf();
+            });
+
+            // Register image viewer component
+            layout.registerComponent('image-viewer', function(container, state) {
+                const path = state.path;
+                const wrapper = $(`
+                    <div class="image-wrapper">
+                        <div class="image-toolbar">
+                            <button class="img-btn" data-action="zoom-out">−</button>
+                            <span class="img-zoom-level">Fit</span>
+                            <button class="img-btn" data-action="zoom-in">+</button>
+                            <button class="img-btn" data-action="fit">Fit</button>
+                            <button class="img-btn" data-action="actual">100%</button>
+                        </div>
+                        <div class="image-container">
+                            <img src="/api/raw/${encodeURIComponent(path)}" alt="${state.name}">
+                        </div>
+                    </div>
+                `);
+                container.getElement().append(wrapper);
+
+                const img = wrapper.find('img');
+                let scale = 'fit';
+
+                function updateZoom() {
+                    if (scale === 'fit') {
+                        img.css({ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto' });
+                        wrapper.find('.img-zoom-level').text('Fit');
+                    } else {
+                        img.css({ maxWidth: 'none', maxHeight: 'none', width: (scale * 100) + '%', height: 'auto' });
+                        wrapper.find('.img-zoom-level').text(Math.round(scale * 100) + '%');
+                    }
+                }
+
+                wrapper.find('.img-btn').on('click', function() {
+                    const action = $(this).data('action');
+                    switch (action) {
+                        case 'zoom-in':
+                            scale = scale === 'fit' ? 1.25 : Math.min(scale * 1.25, 5.0);
+                            break;
+                        case 'zoom-out':
+                            scale = scale === 'fit' ? 0.75 : Math.max(scale / 1.25, 0.1);
+                            break;
+                        case 'fit':
+                            scale = 'fit';
+                            break;
+                        case 'actual':
+                            scale = 1.0;
+                            break;
+                    }
+                    updateZoom();
+                });
+
+                updateZoom();
+            });
+
+            // Register terminal component
+            layout.registerComponent('terminal', function(container, state) {
+                const termId = `term-${++terminalIdCounter}`;
+                const termType = state.type || 'bash';
+                const session = state.session;
+                const windowIdx = state.window || 0;
+
+                const wrapper = $('<div class="terminal-wrapper"></div>');
+                container.getElement().append(wrapper);
+
+                // Create xterm instance
+                const term = new Terminal({
+                    cursorBlink: true,
+                    fontSize: 14,
+                    fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                    theme: {
+                        background: '#1e1e1e',
+                        foreground: '#cccccc',
+                        cursor: '#ffffff'
+                    }
+                });
+
+                const fitAddon = new FitAddon.FitAddon();
+                term.loadAddon(fitAddon);
+
+                const termInfo = {
+                    term,
+                    fitAddon,
+                    container,
+                    type: termType,
+                    session,
+                    window: windowIdx,
+                    connected: false
+                };
+                terminals.set(termId, termInfo);
+
+                container.on('open', function() {
+                    term.open(wrapper[0]);
+                    fitAddon.fit();
+
+                    // Connect to server
+                    socket.emit('open_terminal', {
+                        termId,
+                        type: termType,
+                        session,
+                        window: windowIdx
+                    });
+
+                    term.focus();
+                });
+
+                container.on('resize', function() {
+                    fitAddon.fit();
+                    if (termInfo.connected) {
+                        socket.emit('terminal_resize', {
+                            termId,
+                            rows: term.rows,
+                            cols: term.cols
+                        });
+                    }
+                });
+
+                container.on('destroy', function() {
+                    term.dispose();
+                    terminals.delete(termId);
+                });
+
+                // Send input to server
+                term.onData(function(data) {
+                    if (termInfo.connected) {
+                        socket.emit('terminal_input', { termId, data });
+                    }
+                });
+
+                // Update state for persistence
+                container.setState({
+                    type: termType,
+                    session,
+                    window: windowIdx
+                });
+            });
+
+            // Register webview component for external sites
+            layout.registerComponent('webview', function(container, state) {
+                const url = state.url || 'https://www.google.com';
+                const name = state.name || 'Web';
+
+                const wrapper = $(`
+                    <div class="webview-wrapper">
+                        <div class="webview-toolbar">
+                            <input type="text" class="webview-url" value="${url}" readonly>
+                            <button class="webview-btn" data-action="reload" title="Reload">↻</button>
+                            <button class="webview-btn" data-action="open-external" title="Open in browser">↗</button>
+                        </div>
+                        <div class="webview-container">
+                            <iframe src="${url}" class="webview-frame"></iframe>
+                            <div class="webview-blocked hidden">
+                                <div class="blocked-content">
+                                    <h3>Unable to embed this site</h3>
+                                    <p>This website blocks being embedded in iframes for security reasons.</p>
+                                    <button class="btn-open-external">Open in New Tab</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `);
+                container.getElement().append(wrapper);
+
+                const iframe = wrapper.find('.webview-frame');
+                const blockedMsg = wrapper.find('.webview-blocked');
+
+                // Check if iframe loaded successfully
+                iframe.on('load', function() {
+                    try {
+                        // Try to access iframe content - will fail if blocked
+                        const doc = this.contentDocument || this.contentWindow.document;
+                        // If we get here, it loaded (might be error page though)
+                    } catch (e) {
+                        // Cross-origin - can't tell if blocked
+                    }
+                });
+
+                // Handle X-Frame-Options errors (won't fire in all browsers)
+                iframe.on('error', function() {
+                    iframe.addClass('hidden');
+                    blockedMsg.removeClass('hidden');
+                });
+
+                // Toolbar actions
+                wrapper.find('.webview-btn').on('click', function() {
+                    const action = $(this).data('action');
+                    if (action === 'reload') {
+                        iframe[0].src = iframe[0].src;
+                    } else if (action === 'open-external') {
+                        window.open(url, '_blank');
+                    }
+                });
+
+                wrapper.find('.btn-open-external').on('click', function() {
+                    window.open(url, '_blank');
+                });
+
+                // Update state for persistence
+                container.setState({ url, name });
+            });
+
+            layout.init();
+
+            // Auto-save layout on changes
+            layout.on('stateChanged', function() {
+                clearTimeout(layout._saveTimeout);
+                layout._saveTimeout = setTimeout(saveLayout, 500);
+            });
+
+            // Handle window resize - also trigger component resizes
+            let windowResizeTimeout;
+            $(window).on('resize', function() {
+                if (layout) {
+                    layout.updateSize();
+                    // Trigger resize on all components after layout updates
+                    clearTimeout(windowResizeTimeout);
+                    windowResizeTimeout = setTimeout(() => {
+                        layout.root.getItemsByType('component').forEach(item => {
+                            item.container.emit('resize');
+                        });
+                    }, 100);
+                }
+            });
+        }
+
+        // --- Directory Management ---
+
+        async function loadCurrentDirectory() {
+            try {
+                const res = await fetch('/api/current-directory');
+                const data = await res.json();
+                if (data.path) {
+                    currentDir = data.path;
+                    $('#current-dir').text(data.name || data.path);
+                    loadFileTree();
+                }
+            } catch (e) {
+                console.error('Failed to load current directory:', e);
+            }
+        }
+
+        async function openDirectory(path) {
+            try {
+                const res = await fetch('/api/open-directory', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path })
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+
+                currentDir = data.path;
+                $('#current-dir').text(data.path.split('/').pop() || data.path);
+                loadFileTree();
+                $('#open-dir-modal').addClass('hidden');
+            } catch (e) {
+                alert('Error opening directory: ' + e.message);
+            }
+        }
+
+        async function loadRecentDirectories() {
+            try {
+                const res = await fetch('/api/recent-directories');
+                const data = await res.json();
+                const container = $('#recent-dirs');
+                container.empty();
+
+                if (data.directories && data.directories.length > 0) {
+                    container.append('<div class="recent-label">Recent:</div>');
+                    data.directories.forEach(dir => {
+                        const item = $(`<div class="recent-dir-item">${dir}</div>`);
+                        item.on('click', () => openDirectory(dir));
+                        container.append(item);
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to load recent directories:', e);
+            }
+        }
+
+        // --- Sidebar Resizer ---
+
+        function initSidebarResizer() {
+            const sidebar = $('#sidebar');
+            const resizer = $('#sidebar-resizer');
+            let isResizing = false;
+
+            resizer.on('mousedown', function(e) {
+                isResizing = true;
+                $('body').css('cursor', 'col-resize');
+                e.preventDefault();
+            });
+
+            $(document).on('mousemove', function(e) {
+                if (!isResizing) return;
+                const newWidth = Math.max(150, Math.min(500, e.clientX));
+                sidebar.css('width', newWidth + 'px');
+                if (layout) layout.updateSize();
+            });
+
+            $(document).on('mouseup', function() {
+                if (isResizing) {
+                    isResizing = false;
+                    $('body').css('cursor', '');
+                }
+            });
+        }
+
+        // --- Event Listeners ---
+
+        $(document).ready(function() {
+            // Initialize
+            initLayout();
+            loadCurrentDirectory();
+            initSidebarResizer();
+
+            // Open directory button
+            $('#btn-open-dir').on('click', function() {
+                loadRecentDirectories();
+                $('#dir-path-input').val('');
+                $('#open-dir-modal').removeClass('hidden');
+                $('#dir-path-input').focus();
+            });
+
+            // Open directory modal
+            $('#btn-open-dir-confirm').on('click', function() {
+                const path = $('#dir-path-input').val().trim();
+                if (path) {
+                    openDirectory(path);
+                }
+            });
+
+            $('#btn-open-dir-cancel').on('click', function() {
+                $('#open-dir-modal').addClass('hidden');
+            });
+
+            $('#dir-path-input').on('keypress', function(e) {
+                if (e.which === 13) {
+                    const path = $(this).val().trim();
+                    if (path) {
+                        openDirectory(path);
+                    }
+                }
+            });
+
+            $('#open-dir-modal').on('click', function(e) {
+                if (e.target === this) {
+                    $(this).addClass('hidden');
+                }
+            });
+
+            // Refresh button
+            $('#btn-refresh').on('click', function() {
+                loadFileTree();
+            });
+
+            // Terminal buttons
+            $('#btn-new-bash').on('click', addBashTerminal);
+            $('#btn-new-tmux').on('click', showTmuxModal);
+
+            // Tmux modal
+            $('#btn-close-tmux-modal').on('click', function() {
+                $('#tmux-modal').addClass('hidden');
+            });
+            $('#tmux-modal').on('click', function(e) {
+                if (e.target === this) $(this).addClass('hidden');
+            });
+
+            // Web panel button and modal
+            $('#btn-new-web').on('click', function() {
+                $('#web-url-input').val('');
+                $('#web-modal').removeClass('hidden');
+            });
+
+            $('.web-preset').on('click', function() {
+                const url = $(this).data('url');
+                const name = $(this).data('name');
+                addWebPanel(url, name);
+                $('#web-modal').addClass('hidden');
+            });
+
+            $('#btn-open-custom-url').on('click', function() {
+                const url = $('#web-url-input').val().trim();
+                if (url) {
+                    // Add https if no protocol
+                    const fullUrl = url.match(/^https?:\/\//) ? url : 'https://' + url;
+                    addWebPanel(fullUrl, new URL(fullUrl).hostname);
+                    $('#web-modal').addClass('hidden');
+                }
+            });
+
+            $('#web-url-input').on('keypress', function(e) {
+                if (e.which === 13) {
+                    $('#btn-open-custom-url').click();
+                }
+            });
+
+            $('#btn-close-web-modal').on('click', function() {
+                $('#web-modal').addClass('hidden');
+            });
+
+            $('#web-modal').on('click', function(e) {
+                if (e.target === this) $(this).addClass('hidden');
+            });
+
+            // Keyboard shortcuts
+            $(document).on('keydown', function(e) {
+                // Ctrl+O to open directory
+                if (e.ctrlKey && e.key === 'o') {
+                    e.preventDefault();
+                    $('#btn-open-dir').click();
+                }
+            });
+        });
+
+        // --- Terminal Functions ---
+
+        function addBashTerminal() {
+            if (!layout) return;
+            const newItem = {
+                type: 'component',
+                componentName: 'terminal',
+                title: 'Bash',
+                componentState: { type: 'bash' }
+            };
+
+            if (layout.root.contentItems.length > 0) {
+                const stacks = layout.root.getItemsByType('stack');
+                if (stacks.length > 0) {
+                    stacks[0].addChild(newItem);
+                } else {
+                    layout.root.contentItems[0].addChild(newItem);
+                }
+            } else {
+                layout.root.addChild({
+                    type: 'row',
+                    content: [newItem]
+                });
+            }
+        }
+
+        async function showTmuxModal() {
+            const modal = $('#tmux-modal');
+            const list = $('#session-list');
+            list.empty();
+
+            try {
+                const res = await fetch('/api/sessions');
+                const sessions = await res.json();
+
+                if (sessions.length === 0) {
+                    list.html('<p class="no-sessions">No tmux sessions found.<br>Create one with: tmux new -s mysession</p>');
+                } else {
+                    sessions.forEach(session => {
+                        const item = $(`
+                            <div class="session-item" data-session="${session.name}">
+                                <span class="session-name">${session.name}</span>
+                                <span class="session-info">${session.windows} window(s) ${session.attached ? '(attached)' : ''}</span>
+                            </div>
+                        `);
+                        item.on('click', function() {
+                            addTmuxTerminal(session.name);
+                            modal.addClass('hidden');
+                        });
+                        list.append(item);
+                    });
+                }
+            } catch (e) {
+                list.html('<p class="error">Failed to load sessions</p>');
+            }
+
+            modal.removeClass('hidden');
+        }
+
+        function addTmuxTerminal(sessionName, windowIdx = 0) {
+            if (!layout) return;
+            const newItem = {
+                type: 'component',
+                componentName: 'terminal',
+                title: `tmux: ${sessionName}`,
+                componentState: {
+                    type: 'tmux',
+                    session: sessionName,
+                    window: windowIdx
+                }
+            };
+
+            if (layout.root.contentItems.length > 0) {
+                const stacks = layout.root.getItemsByType('stack');
+                if (stacks.length > 0) {
+                    stacks[0].addChild(newItem);
+                } else {
+                    layout.root.contentItems[0].addChild(newItem);
+                }
+            } else {
+                layout.root.addChild({
+                    type: 'row',
+                    content: [newItem]
+                });
+            }
+        }
+
+        function addWebPanel(url, name) {
+            if (!layout) return;
+            const newItem = {
+                type: 'component',
+                componentName: 'webview',
+                title: name || 'Web',
+                componentState: { url, name }
+            };
+
+            if (layout.root.contentItems.length > 0) {
+                const stacks = layout.root.getItemsByType('stack');
+                if (stacks.length > 0) {
+                    stacks[0].addChild(newItem);
+                } else {
+                    layout.root.contentItems[0].addChild(newItem);
+                }
+            } else {
+                layout.root.addChild({
+                    type: 'row',
+                    content: [newItem]
+                });
+            }
+        }
+
+        // --- Socket.IO Event Handlers ---
+
+        socket.on('terminal_output', function(data) {
+            const termInfo = terminals.get(data.termId);
+            if (termInfo) {
+                termInfo.term.write(data.data);
+            }
+        });
+
+        socket.on('terminal_ready', function(data) {
+            const termInfo = terminals.get(data.termId);
+            if (termInfo) {
+                termInfo.connected = true;
+                termInfo.fitAddon.fit();
+                socket.emit('terminal_resize', {
+                    termId: data.termId,
+                    rows: termInfo.term.rows,
+                    cols: termInfo.term.cols
+                });
+            }
+        });
+
+        socket.on('terminal_closed', function(data) {
+            const termInfo = terminals.get(data.termId);
+            if (termInfo) {
+                termInfo.connected = false;
+                termInfo.term.write('\r\n[Terminal closed]\r\n');
+            }
+        });
+
+        socket.on('terminal_error', function(data) {
+            const termInfo = terminals.get(data.termId);
+            if (termInfo) {
+                termInfo.term.write(`\r\n[Error: ${data.error}]\r\n`);
+            }
+        });
+    </script>
+</body>
+</html>

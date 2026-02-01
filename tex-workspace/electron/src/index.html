@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data: file:; font-src 'self' https://cdn.jsdelivr.net; frame-src *;">
+    <title>TeX Workspace</title>
+
+    <!-- GoldenLayout -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/src/css/goldenlayout-base.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/src/css/goldenlayout-dark-theme.css">
+
+    <!-- CodeMirror 5 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/monokai.min.css">
+
+    <!-- xterm.js -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@4.19.0/css/xterm.css">
+
+    <style>
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0; height: 100%; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1e1e1e; color: #cccccc;
+        }
+
+        /* Header */
+        #header {
+            display: flex; align-items: center; padding: 8px 16px;
+            background: #252526; border-bottom: 1px solid #3c3c3c;
+            height: 48px; gap: 16px; -webkit-app-region: drag;
+        }
+        #header h1 { margin: 0; font-size: 16px; font-weight: 500; color: #fff; }
+        #controls { display: flex; align-items: center; gap: 8px; -webkit-app-region: no-drag; }
+        #controls button {
+            padding: 6px 12px; border: none; border-radius: 4px;
+            cursor: pointer; font-size: 13px; background: #0e639c; color: #fff;
+        }
+        #controls button:hover { background: #1177bb; }
+        .btn-secondary { background: #3c3c3c !important; }
+        .btn-secondary:hover { background: #4e4e4e !important; }
+        .btn-web { background: #7c3aed !important; }
+        .btn-web:hover { background: #8b5cf6 !important; }
+        .control-separator { color: #3c3c3c; margin: 0 4px; }
+        #current-dir { color: #888; font-size: 13px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* Group tabs */
+        #group-bar {
+            display: flex; align-items: center; padding: 0 8px;
+            background: #2d2d2d; border-bottom: 1px solid #3c3c3c;
+            height: 32px; gap: 2px;
+        }
+        .group-tab {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 12px; background: #1e1e1e; border: none;
+            color: #888; font-size: 12px; cursor: pointer;
+            border-radius: 4px 4px 0 0; margin-top: 4px;
+        }
+        .group-tab:hover { color: #ccc; }
+        .group-tab.active { background: #252526; color: #fff; }
+        .group-tab .close-group {
+            display: none; font-size: 10px; padding: 2px 4px;
+            border-radius: 3px; margin-left: 4px;
+        }
+        .group-tab:hover .close-group { display: inline; }
+        .group-tab .close-group:hover { background: #4e4e4e; }
+        #btn-add-group {
+            padding: 4px 10px; background: none; border: none;
+            color: #888; font-size: 16px; cursor: pointer;
+        }
+        #btn-add-group:hover { color: #fff; }
+
+        /* Main container */
+        #main-container { display: flex; position: absolute; top: 80px; left: 0; right: 0; bottom: 0; }
+
+        /* Sidebar */
+        #sidebar { width: 250px; background: #252526; border-right: 1px solid #3c3c3c; display: flex; flex-direction: column; }
+        #sidebar-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid #3c3c3c; font-size: 12px; font-weight: 600; text-transform: uppercase; color: #888; }
+        #sidebar-header button { background: none; border: none; color: #888; cursor: pointer; font-size: 14px; padding: 4px; }
+        #sidebar-header button:hover { color: #fff; }
+        #file-tree { flex: 1; overflow-y: auto; padding: 8px 0; }
+        #sidebar-resizer { width: 4px; background: #3c3c3c; cursor: col-resize; }
+        #sidebar-resizer:hover { background: #0e639c; }
+
+        /* File tree */
+        .file-item { user-select: none; }
+        .file-row { display: flex; align-items: center; padding: 4px 12px; cursor: pointer; gap: 6px; }
+        .file-row:hover { background: #2d2d2d; }
+        .file-icon { font-size: 14px; width: 20px; text-align: center; }
+        .file-name { font-size: 13px; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .folder > .file-row { font-weight: 500; }
+        .folder-children { display: none; padding-left: 16px; }
+        .folder-children.expanded { display: block; }
+        .empty-state { padding: 20px; text-align: center; color: #888; font-size: 13px; }
+
+        /* Layout container */
+        #layout-container { flex: 1; position: relative; }
+        .group-layout-container { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+
+        /* GoldenLayout overrides */
+        .lm_goldenlayout { background: #1e1e1e; }
+        .lm_header { height: 28px !important; background: #252526 !important; }
+        .lm_tab { background: #2d2d2d !important; color: #888 !important; border: none !important; margin-right: 1px !important; font-size: 12px !important; padding: 4px 25px 4px 10px !important; }
+        .lm_tab.lm_active { background: #1e1e1e !important; color: #fff !important; }
+        .lm_tab:hover { color: #fff !important; }
+        .lm_close_tab { top: 6px !important; right: 6px !important; width: 14px !important; height: 14px !important; }
+        .lm_content { background: #1e1e1e !important; border: 1px solid transparent !important; }
+        .lm_item_container:focus-within > .lm_content { border: 1px solid #0e639c !important; }
+        .lm_stack.lm_active > .lm_items > .lm_item_container > .lm_content { border: 1px solid #0e639c !important; }
+        .lm_splitter { background: #3c3c3c !important; }
+        .lm_splitter:hover { background: #0e639c !important; }
+
+        /* Welcome panel */
+        .welcome-panel { padding: 40px; max-width: 500px; margin: 0 auto; }
+        .welcome-panel h2 { margin: 0 0 20px 0; color: #fff; font-weight: 500; }
+        .welcome-panel p { margin: 10px 0; color: #888; line-height: 1.6; }
+        .welcome-panel ul { margin: 10px 0; padding-left: 20px; color: #888; }
+        .welcome-panel li { margin: 8px 0; }
+        .welcome-panel strong { color: #0e639c; }
+
+        /* Editor */
+        .editor-wrapper { display: flex; flex-direction: column; height: 100%; background: #1e1e1e; }
+        .editor-wrapper .CodeMirror { flex: 1; height: auto !important; font-family: Menlo, Monaco, 'Courier New', monospace; font-size: 14px; }
+        .editor-status-bar { display: flex; align-items: center; padding: 4px 12px; background: #252526; border-top: 1px solid #3c3c3c; font-size: 12px; color: #888; }
+
+        /* PDF viewer */
+        .pdf-wrapper { display: flex; flex-direction: column; height: 100%; background: #1e1e1e; }
+        .pdf-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #252526; border-bottom: 1px solid #3c3c3c; }
+        .pdf-btn { padding: 4px 8px; background: #3c3c3c; color: #ccc; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; }
+        .pdf-btn:hover { background: #4e4e4e; }
+        .pdf-page-info, .pdf-zoom-level { font-size: 12px; color: #888; min-width: 60px; text-align: center; }
+        .pdf-separator { color: #3c3c3c; }
+        .pdf-container { flex: 1; overflow: auto; padding: 20px; background: #525252; }
+        .pdf-pages { display: flex; flex-direction: column; align-items: center; }
+        .pdf-page { background: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.5); margin-bottom: 20px; position: relative; }
+        .pdf-page canvas { display: block; }
+        .pdf-page .textLayer { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; opacity: 0.2; line-height: 1.0; }
+        .pdf-page .textLayer > span { color: transparent; position: absolute; white-space: pre; cursor: text; }
+        .pdf-page .textLayer ::selection { background: rgba(0,0,255,0.3); }
+
+        /* Image viewer */
+        .image-wrapper { display: flex; flex-direction: column; height: 100%; background: #1e1e1e; }
+        .image-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #252526; border-bottom: 1px solid #3c3c3c; }
+        .img-btn { padding: 4px 8px; background: #3c3c3c; color: #ccc; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; }
+        .img-btn:hover { background: #4e4e4e; }
+        .img-zoom-level { font-size: 12px; color: #888; min-width: 50px; text-align: center; }
+        .image-container { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: center; padding: 10px; background: #2d2d2d; }
+        .image-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+        /* Terminal */
+        .terminal-wrapper { width: 100%; height: 100%; padding: 4px; background: #1e1e1e; }
+        .terminal-wrapper .xterm { height: 100%; }
+
+        /* Webview - uses Electron webview tag, not iframe! */
+        .webview-wrapper { display: flex; flex-direction: column; height: 100%; background: #1e1e1e; }
+        .webview-toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #252526; border-bottom: 1px solid #3c3c3c; }
+        .webview-url { flex: 1; padding: 4px 8px; background: #1e1e1e; border: 1px solid #3c3c3c; border-radius: 3px; color: #888; font-size: 12px; }
+        .webview-btn { padding: 4px 8px; background: #3c3c3c; color: #ccc; border: none; border-radius: 3px; cursor: pointer; font-size: 14px; }
+        .webview-btn:hover { background: #4e4e4e; }
+        .webview-container { flex: 1; position: relative; }
+        .webview-container webview { width: 100%; height: 100%; }
+
+        /* Modal */
+        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .modal.hidden { display: none; }
+        .modal-content { background: #252526; border-radius: 8px; padding: 20px; min-width: 400px; max-width: 600px; max-height: 80vh; overflow-y: auto; }
+        .modal-content h3 { margin: 0 0 16px 0; color: #fff; font-weight: 500; }
+        .modal-content input[type="text"] { width: 100%; padding: 10px 12px; border: 1px solid #3c3c3c; border-radius: 4px; background: #1e1e1e; color: #fff; font-size: 14px; margin-bottom: 16px; }
+        .modal-content input:focus { outline: none; border-color: #0e639c; }
+        .modal-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+        .modal-buttons button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        #btn-open-dir-confirm { background: #0e639c; color: #fff; }
+        #btn-open-dir-cancel, #btn-close-web-modal, #btn-close-tmux-modal { background: #3c3c3c; color: #fff; width: 100%; padding: 10px; }
+
+        /* Web presets */
+        #web-presets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
+        .web-preset { display: flex; align-items: center; gap: 8px; padding: 12px; background: #2d2d2d; border-radius: 4px; cursor: pointer; }
+        .web-preset:hover { background: #3c3c3c; }
+        .preset-icon { font-size: 20px; }
+        .preset-name { color: #fff; font-weight: 500; }
+        .web-custom { display: flex; gap: 8px; margin-bottom: 12px; }
+        .web-custom input { flex: 1; }
+        .web-custom button { padding: 10px 16px; background: #7c3aed; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+
+        /* Session list */
+        .session-item { display: flex; justify-content: space-between; padding: 10px 12px; background: #2d2d2d; border-radius: 4px; margin-bottom: 4px; cursor: pointer; }
+        .session-item:hover { background: #3c3c3c; }
+        .session-name { color: #fff; font-weight: 500; }
+        .session-info { color: #888; font-size: 12px; }
+        .no-sessions { color: #888; text-align: center; padding: 20px; }
+        .error { color: #f44747; padding: 20px; text-align: center; }
+
+        /* Recent directories */
+        #recent-dirs { margin-bottom: 12px; max-height: 200px; overflow-y: auto; }
+        #recent-dirs:empty { display: none; }
+        .recent-dir { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #2d2d2d; border-radius: 4px; margin-bottom: 4px; cursor: pointer; }
+        .recent-dir:hover { background: #3c3c3c; }
+        .recent-dir-icon { color: #888; }
+        .recent-dir-path { color: #ccc; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .recent-dir-name { color: #fff; font-weight: 500; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: #1e1e1e; }
+        ::-webkit-scrollbar-thumb { background: #3c3c3c; border-radius: 5px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div id="header">
+        <h1>TeX Workspace</h1>
+        <div id="controls">
+            <button id="btn-open-dir">Open Directory</button>
+            <span id="current-dir"></span>
+            <span class="control-separator">|</span>
+            <button id="btn-new-bash">+ Bash</button>
+            <button id="btn-new-tmux" class="btn-secondary">+ Tmux</button>
+            <span class="control-separator">|</span>
+            <button id="btn-new-web" class="btn-web">+ Web</button>
+        </div>
+    </div>
+
+    <!-- Web panel modal -->
+    <div id="web-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Open Web Panel</h3>
+            <div id="web-presets">
+                <div class="web-preset" data-url="https://chatgpt.com" data-name="ChatGPT">
+                    <span class="preset-icon">🤖</span><span class="preset-name">ChatGPT</span>
+                </div>
+                <div class="web-preset" data-url="https://claude.ai" data-name="Claude">
+                    <span class="preset-icon">🧠</span><span class="preset-name">Claude</span>
+                </div>
+                <div class="web-preset" data-url="https://gemini.google.com" data-name="Gemini">
+                    <span class="preset-icon">✨</span><span class="preset-name">Gemini</span>
+                </div>
+                <div class="web-preset" data-url="https://www.google.com" data-name="Google">
+                    <span class="preset-icon">🔍</span><span class="preset-name">Google</span>
+                </div>
+            </div>
+            <div class="web-custom">
+                <input type="text" id="web-url-input" placeholder="Or enter custom URL...">
+                <button id="btn-open-custom-url">Open</button>
+            </div>
+            <button id="btn-close-web-modal">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Tmux session modal -->
+    <div id="tmux-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Select Tmux Session</h3>
+            <div id="session-list"></div>
+            <button id="btn-close-tmux-modal">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Open directory modal -->
+    <div id="open-dir-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Open Directory</h3>
+            <div id="recent-dirs"></div>
+            <input type="text" id="dir-path-input" placeholder="Enter path or use native dialog...">
+            <div class="modal-buttons">
+                <button id="btn-native-dialog" class="btn-secondary">Browse...</button>
+                <button id="btn-open-dir-confirm">Open</button>
+                <button id="btn-open-dir-cancel" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Group tabs -->
+    <div id="group-bar">
+        <button id="btn-add-group" title="New Group">+</button>
+    </div>
+
+    <!-- Main container -->
+    <div id="main-container">
+        <div id="sidebar">
+            <div id="sidebar-header">
+                <span>Files</span>
+                <button id="btn-refresh">↻</button>
+            </div>
+            <div id="file-tree"></div>
+        </div>
+        <div id="sidebar-resizer"></div>
+        <div id="layout-container"></div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/golden-layout@1.5.9/dist/goldenlayout.min.js"></script>
+    <!-- PDF.js removed - using Chrome's built-in PDF viewer via webview instead -->
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/stex/stex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm@4.19.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.5.0/lib/xterm-addon-fit.min.js"></script>
+
+    <script>
+        // State
+        let layout = null;
+        let currentDir = null;
+        const openEditors = new Map();
+        const terminals = new Map();
+        let terminalIdCounter = Date.now();
+
+        // Groups state
+        let groups = [];
+        let activeGroupId = null;
+        const groupLayouts = new Map(); // Keep layouts alive per group
+        let groupSwitchToken = 0; // Prevent race conditions in async group switching
+
+        const api = window.electronAPI;
+
+        // Default layout
+        const defaultConfig = {
+            settings: { showPopoutIcon: false, showMaximiseIcon: true, showCloseIcon: true },
+            content: [{ type: 'row', content: [{ type: 'component', componentName: 'welcome', title: 'Welcome' }] }]
+        };
+
+        // --- Groups ---
+        function loadGroups() {
+            // Always check for old data to migrate (even if groups exist)
+            const oldLayout = localStorage.getItem('tex-workspace-layout');
+            const oldDir = localStorage.getItem('tex-workspace-directory');
+
+            try {
+                const saved = localStorage.getItem('tex-workspace-groups');
+                if (saved) {
+                    groups = JSON.parse(saved);
+                }
+            } catch (e) { console.log('Could not load groups:', e); }
+
+            if (groups.length === 0) {
+                groups = [{ id: 'default', name: 'Default', directory: null }];
+            }
+
+            // Migrate old layout and directory to default group
+            if (oldLayout) {
+                localStorage.setItem('tex-workspace-layout-default', oldLayout);
+                localStorage.removeItem('tex-workspace-layout');
+                console.log('Migrated old layout to default group');
+            }
+            if (oldDir) {
+                const defaultGroup = groups.find(g => g.id === 'default');
+                if (defaultGroup && !defaultGroup.directory) {
+                    defaultGroup.directory = oldDir;
+                }
+                localStorage.removeItem('tex-workspace-directory');
+                console.log('Migrated old directory to default group');
+            }
+
+            activeGroupId = localStorage.getItem('tex-workspace-active-group') || groups[0].id;
+            if (!groups.find(g => g.id === activeGroupId)) {
+                activeGroupId = groups[0].id;
+            }
+        }
+
+        function saveGroups() {
+            localStorage.setItem('tex-workspace-groups', JSON.stringify(groups));
+            localStorage.setItem('tex-workspace-active-group', activeGroupId);
+        }
+
+        // --- Recent Directories ---
+        function getRecentDirs() {
+            try {
+                const saved = localStorage.getItem('tex-workspace-recent-dirs');
+                return saved ? JSON.parse(saved) : [];
+            } catch (e) { return []; }
+        }
+
+        function addRecentDir(path) {
+            let recent = getRecentDirs();
+            // Remove if already exists, add to front
+            recent = recent.filter(d => d !== path);
+            recent.unshift(path);
+            // Keep only last 10
+            recent = recent.slice(0, 10);
+            localStorage.setItem('tex-workspace-recent-dirs', JSON.stringify(recent));
+        }
+
+        function renderRecentDirs() {
+            const container = $('#recent-dirs').empty();
+            const recent = getRecentDirs();
+
+            recent.forEach(path => {
+                const name = path.split('/').pop() || path;
+                const item = $(`
+                    <div class="recent-dir">
+                        <span class="recent-dir-icon">📁</span>
+                        <div>
+                            <div class="recent-dir-name">${name}</div>
+                            <div class="recent-dir-path">${path}</div>
+                        </div>
+                    </div>
+                `);
+                item.on('click', async () => {
+                    const result = await api.setDirectory(path);
+                    if (result.path) {
+                        currentDir = result.path;
+                        $('#current-dir').text(result.name);
+                        const group = groups.find(g => g.id === activeGroupId);
+                        if (group) { group.directory = result.path; saveGroups(); }
+                        addRecentDir(result.path);
+                        loadFileTree();
+                        $('#open-dir-modal').addClass('hidden');
+                    } else {
+                        alert('Directory not found: ' + path);
+                    }
+                });
+                container.append(item);
+            });
+        }
+
+        function renderGroupTabs() {
+            const bar = $('#group-bar');
+            bar.find('.group-tab').remove();
+
+            groups.forEach(group => {
+                const tab = $(`
+                    <div class="group-tab ${group.id === activeGroupId ? 'active' : ''}" data-id="${group.id}">
+                        <span class="group-name">${group.name}</span>
+                        ${groups.length > 1 ? '<span class="close-group">×</span>' : ''}
+                    </div>
+                `);
+
+                tab.on('click', function(e) {
+                    if (!$(e.target).hasClass('close-group')) {
+                        switchGroup(group.id);
+                    }
+                });
+
+                tab.find('.close-group').on('click', function(e) {
+                    e.stopPropagation();
+                    deleteGroup(group.id);
+                });
+
+                tab.on('dblclick', function(e) {
+                    e.stopPropagation();
+                    const nameSpan = tab.find('.group-name');
+                    const currentName = group.name;
+                    const input = $(`<input type="text" class="group-name-input" value="${currentName}" style="width:80px;padding:2px 4px;font-size:12px;background:#1e1e1e;border:1px solid #0e639c;color:#fff;border-radius:2px;">`);
+                    nameSpan.replaceWith(input);
+                    input.focus().select();
+
+                    function finishEdit() {
+                        const newName = input.val().trim() || currentName;
+                        group.name = newName;
+                        saveGroups();
+                        renderGroupTabs();
+                    }
+
+                    input.on('blur', finishEdit);
+                    input.on('keydown', function(e) {
+                        if (e.key === 'Enter') finishEdit();
+                        if (e.key === 'Escape') { group.name = currentName; renderGroupTabs(); }
+                    });
+                });
+
+                bar.find('#btn-add-group').before(tab);
+            });
+        }
+
+        function addGroup() {
+            const id = 'group-' + Date.now();
+            const name = 'Group ' + (groups.length + 1);
+            groups.push({ id, name, directory: null });
+            saveGroups();
+            renderGroupTabs();
+            switchGroup(id);
+        }
+
+        function deleteGroup(id) {
+            if (groups.length <= 1) return;
+            const index = groups.findIndex(g => g.id === id);
+            if (index === -1) return;
+
+            // Remove group's saved layout from storage
+            localStorage.removeItem(`tex-workspace-layout-${id}`);
+
+            // Destroy and remove layout instance
+            if (groupLayouts.has(id)) {
+                const layoutInstance = groupLayouts.get(id);
+                try { layoutInstance.destroy(); } catch (e) {}
+                groupLayouts.delete(id);
+                $(`#layout-${id}`).remove();
+            }
+
+            groups.splice(index, 1);
+
+            if (activeGroupId === id) {
+                activeGroupId = groups[Math.max(0, index - 1)].id;
+            }
+
+            saveGroups();
+            renderGroupTabs();
+            loadGroupState();
+        }
+
+        async function switchGroup(id) {
+            if (id === activeGroupId) return;
+
+            // Save current group's layout config (for persistence)
+            saveCurrentGroupState();
+
+            // Hide current layout container (use visibility to keep layout intact)
+            if (activeGroupId && groupLayouts.has(activeGroupId)) {
+                $(`#layout-${activeGroupId}`).css({ visibility: 'hidden', 'z-index': 0 });
+            }
+
+            // Switch to new group
+            activeGroupId = id;
+            const token = ++groupSwitchToken; // Track this switch operation
+            saveGroups();
+            renderGroupTabs();
+
+            // Load new group's state (pass token to detect stale calls)
+            await loadGroupState(token);
+        }
+
+        function saveCurrentGroupState() {
+            const group = groups.find(g => g.id === activeGroupId);
+            if (group) {
+                group.directory = currentDir;
+                const layoutInstance = groupLayouts.get(activeGroupId);
+                if (layoutInstance) {
+                    try {
+                        const config = layoutInstance.toConfig();
+                        localStorage.setItem(`tex-workspace-layout-${activeGroupId}`, JSON.stringify(config));
+                    } catch (e) { console.log('Could not save layout:', e); }
+                }
+                saveGroups();
+            }
+        }
+
+        function saveAllGroupStates() {
+            // Save current group's directory
+            const currentGroup = groups.find(g => g.id === activeGroupId);
+            if (currentGroup) {
+                currentGroup.directory = currentDir;
+            }
+
+            // Save all group layouts
+            groupLayouts.forEach((layoutInstance, groupId) => {
+                try {
+                    const config = layoutInstance.toConfig();
+                    localStorage.setItem(`tex-workspace-layout-${groupId}`, JSON.stringify(config));
+                } catch (e) { console.log('Could not save layout for group', groupId, e); }
+            });
+
+            // Save groups list
+            saveGroups();
+            console.log('Saved all group states');
+        }
+
+        async function loadGroupState(token = null) {
+            const group = groups.find(g => g.id === activeGroupId);
+            if (!group) return;
+
+            // If token provided, check if this call is stale (user switched again)
+            if (token !== null && token !== groupSwitchToken) {
+                console.log('Ignoring stale group switch');
+                return;
+            }
+
+            // Load directory
+            currentDir = group.directory;
+            if (currentDir) {
+                const result = await api.setDirectory(currentDir);
+                if (result.path) {
+                    currentDir = result.path;
+                    $('#current-dir').text(result.name);
+                } else {
+                    currentDir = null;
+                    $('#current-dir').text('');
+                }
+            } else {
+                $('#current-dir').text('');
+            }
+            loadFileTree();
+
+            // Check if layout already exists for this group
+            if (groupLayouts.has(activeGroupId)) {
+                // Show existing layout (use visibility + z-index)
+                $(`#layout-${activeGroupId}`).css({ visibility: 'visible', 'z-index': 1 });
+                const layoutInstance = groupLayouts.get(activeGroupId);
+                layout = layoutInstance;
+                // Force layout update after making visible
+                setTimeout(() => {
+                    if (layout) layout.updateSize();
+                }, 100);
+            } else {
+                // Create new layout container and layout
+                const container = $(`<div id="layout-${activeGroupId}" class="group-layout-container" style="z-index:1;"></div>`);
+                $('#layout-container').append(container);
+
+                let config = defaultConfig;
+                try {
+                    const saved = localStorage.getItem(`tex-workspace-layout-${activeGroupId}`);
+                    if (saved) {
+                        config = JSON.parse(saved);
+                    }
+                } catch (e) { console.log('Could not load layout:', e); }
+
+                initLayoutWithConfig(config, container[0]);
+                groupLayouts.set(activeGroupId, layout);
+            }
+        }
+
+        // --- File Tree ---
+        async function loadFileTree(path = '') {
+            const tree = $('#file-tree');
+            if (!currentDir) {
+                tree.html('<div class="empty-state">No directory opened.<br>Click "Open Directory" to start.</div>');
+                return;
+            }
+
+            const data = await api.listFiles(path);
+            if (data.error) {
+                tree.html(`<div class="error">${data.error}</div>`);
+                return;
+            }
+
+            const container = path === '' ? tree.empty() : tree.find(`[data-path="${path}"] > .folder-children`);
+            if (path !== '') container.empty();
+            renderFileItems(container, data.files, path);
+        }
+
+        function renderFileItems(container, files, parentPath) {
+            files.forEach(file => {
+                const item = $(`
+                    <div class="file-item ${file.isDirectory ? 'folder' : 'file'}" data-path="${file.path}">
+                        <div class="file-row">
+                            <span class="file-icon">${getFileIcon(file)}</span>
+                            <span class="file-name">${file.name}</span>
+                        </div>
+                        ${file.isDirectory ? '<div class="folder-children"></div>' : ''}
+                    </div>
+                `);
+
+                item.find('.file-row').on('click', function(e) {
+                    e.stopPropagation();
+                    if (file.isDirectory) {
+                        const children = item.find('> .folder-children');
+                        if (children.hasClass('expanded')) {
+                            children.removeClass('expanded').empty();
+                            item.find('> .file-row .file-icon').text('📁');
+                        } else {
+                            children.addClass('expanded');
+                            item.find('> .file-row .file-icon').text('📂');
+                            loadFileTree(file.path);
+                        }
+                    }
+                });
+
+                item.find('.file-row').on('dblclick', function(e) {
+                    e.stopPropagation();
+                    if (!file.isDirectory) openFile(file);
+                });
+
+                container.append(item);
+            });
+        }
+
+        function getFileIcon(file) {
+            if (file.isDirectory) return '📁';
+            if (file.isPdf) return '📄';
+            if (file.isImage) return '🖼️';
+            if (file.name.endsWith('.tex')) return '📝';
+            if (file.name.endsWith('.bib')) return '📚';
+            return '📄';
+        }
+
+        function openFile(file) {
+            if (file.isText) openTextEditor(file.path, file.name);
+            else if (file.isPdf) openPdfViewer(file.path, file.name);
+            else if (file.isImage) openImageViewer(file.path, file.name);
+        }
+
+        function openTextEditor(path, name) {
+            addToLayout({ type: 'component', componentName: 'editor', title: name, componentState: { path, name } });
+        }
+
+        function openPdfViewer(path, name) {
+            addToLayout({ type: 'component', componentName: 'pdf-viewer', title: name, componentState: { path, name } });
+        }
+
+        function openImageViewer(path, name) {
+            addToLayout({ type: 'component', componentName: 'image-viewer', title: name, componentState: { path, name } });
+        }
+
+        function addToLayout(newItem) {
+            if (!layout) return;
+            if (layout.root.contentItems.length > 0) {
+                const stacks = layout.root.getItemsByType('stack');
+                if (stacks.length > 0) stacks[0].addChild(newItem);
+                else layout.root.contentItems[0].addChild(newItem);
+            } else {
+                layout.root.addChild({ type: 'row', content: [newItem] });
+            }
+        }
+
+        // --- Layout ---
+        function initLayoutWithConfig(config, container) {
+            const targetContainer = container || $(`#layout-${activeGroupId}`)[0] || $('#layout-container')[0];
+            layout = new GoldenLayout(config, targetContainer);
+            registerLayoutComponents();
+            layout.init();
+
+            // Save layout to localStorage on change (debounced)
+            let saveLayoutTimeout;
+            const groupId = activeGroupId; // Capture current group ID
+            const currentLayout = layout; // Capture for closure
+
+            layout.on('stateChanged', () => {
+                clearTimeout(saveLayoutTimeout);
+                saveLayoutTimeout = setTimeout(() => {
+                    try {
+                        const state = currentLayout.toConfig();
+                        localStorage.setItem(`tex-workspace-layout-${groupId}`, JSON.stringify(state));
+                    } catch (e) { console.log('Could not save layout:', e); }
+                }, 500);
+            });
+
+            // Clear timeout when layout is destroyed
+            layout.on('destroy', () => {
+                clearTimeout(saveLayoutTimeout);
+            });
+        }
+
+        function registerLayoutComponents() {
+
+            // Welcome component
+            layout.registerComponent('welcome', function(container) {
+                container.getElement().html(`
+                    <div class="welcome-panel">
+                        <h2>TeX Workspace (Desktop)</h2>
+                        <p>Open a directory to browse LaTeX files.</p>
+                        <p><strong>New in Desktop:</strong> ChatGPT, Claude, and Gemini can be embedded!</p>
+                    </div>
+                `);
+            });
+
+            // Editor component
+            layout.registerComponent('editor', function(container, state) {
+                const wrapper = $('<div class="editor-wrapper"></div>');
+                const statusBar = $('<div class="editor-status-bar"><span class="status-text">Loading...</span></div>');
+                wrapper.append(statusBar);
+                container.getElement().append(wrapper);
+
+                const path = state.path;
+                let editor = null, saving = false, lastSavedContent = '', autoSaveTimeout = null;
+
+                api.readFile(path).then(data => {
+                    if (data.error) { wrapper.prepend(`<div class="error">${data.error}</div>`); return; }
+
+                    const textarea = $('<textarea></textarea>');
+                    wrapper.prepend(textarea);
+
+                    editor = CodeMirror.fromTextArea(textarea[0], {
+                        mode: 'stex', theme: 'monokai', lineNumbers: true, lineWrapping: true,
+                        matchBrackets: true, autoCloseBrackets: true, indentUnit: 4, tabSize: 4,
+                        extraKeys: { 'Ctrl-S': saveFile, 'Cmd-S': saveFile }
+                    });
+
+                    editor.setValue(data.content);
+                    lastSavedContent = data.content;
+                    statusBar.find('.status-text').text(path);
+
+                    editor.on('change', function() {
+                        if (editor.getValue() !== lastSavedContent) {
+                            statusBar.find('.status-text').text(`${path} (modified)`);
+                            clearTimeout(autoSaveTimeout);
+                            autoSaveTimeout = setTimeout(saveFile, 2000);
+                        }
+                    });
+
+                    container.on('resize', () => setTimeout(() => editor.refresh(), 100));
+                    setTimeout(() => editor.refresh(), 100);
+                });
+
+                async function saveFile() {
+                    if (!editor || saving) return;
+                    const content = editor.getValue();
+                    if (content === lastSavedContent) return;
+                    saving = true;
+                    statusBar.find('.status-text').text('Saving...');
+                    const result = await api.saveFile(path, content);
+                    if (result.status === 'ok') {
+                        lastSavedContent = content;
+                        statusBar.find('.status-text').text(`Saved: ${path}`);
+                        setTimeout(() => statusBar.find('.status-text').text(path), 2000);
+                    } else {
+                        statusBar.find('.status-text').text(`Error: ${result.error}`);
+                    }
+                    saving = false;
+                }
+
+                container.on('destroy', () => { clearTimeout(autoSaveTimeout); if (editor) editor.toTextArea(); });
+            });
+
+            // PDF viewer component - uses Chrome's built-in PDF viewer via webview (fast!)
+            layout.registerComponent('pdf-viewer', function(container, state) {
+                const path = state.path;
+                const wrapper = $(`
+                    <div class="webview-wrapper">
+                        <div class="webview-toolbar">
+                            <span style="color:#888;font-size:12px;">${path}</span>
+                            <button class="webview-btn" data-action="reload" title="Reload">↻</button>
+                        </div>
+                        <div class="webview-container">
+                            <webview style="width:100%;height:100%"></webview>
+                        </div>
+                    </div>
+                `);
+                container.getElement().append(wrapper);
+
+                const webview = wrapper.find('webview')[0];
+                let lastMtime = null;
+
+                async function loadPdf() {
+                    const fullPath = await api.getFilePath(path);
+                    if (!fullPath) {
+                        wrapper.find('.webview-container').html('<div class="error">File not found</div>');
+                        return;
+                    }
+                    webview.src = 'file://' + fullPath;
+                }
+
+                wrapper.find('.webview-btn').on('click', function() {
+                    webview.reload();
+                });
+
+                // Auto-reload when file changes
+                const checkInterval = setInterval(async () => {
+                    const data = await api.getFileMtime(path);
+                    if (data.mtime && lastMtime && data.mtime !== lastMtime) {
+                        webview.reload();
+                    }
+                    lastMtime = data.mtime;
+                }, 2000);
+
+                container.on('destroy', () => clearInterval(checkInterval));
+                loadPdf();
+            });
+
+            // Image viewer component
+            layout.registerComponent('image-viewer', function(container, state) {
+                const path = state.path;
+                api.getFilePath(path).then(fullPath => {
+                    const wrapper = $(`
+                        <div class="image-wrapper">
+                            <div class="image-toolbar">
+                                <button class="img-btn" data-action="zoom-out">−</button>
+                                <span class="img-zoom-level">Fit</span>
+                                <button class="img-btn" data-action="zoom-in">+</button>
+                                <button class="img-btn" data-action="fit">Fit</button>
+                                <button class="img-btn" data-action="actual">100%</button>
+                            </div>
+                            <div class="image-container">
+                                <img src="file://${fullPath}" alt="${state.name}">
+                            </div>
+                        </div>
+                    `);
+                    container.getElement().append(wrapper);
+
+                    let scale = 'fit';
+                    const img = wrapper.find('img');
+                    function updateZoom() {
+                        if (scale === 'fit') img.css({ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto' });
+                        else img.css({ maxWidth: 'none', maxHeight: 'none', width: (scale * 100) + '%', height: 'auto' });
+                        wrapper.find('.img-zoom-level').text(scale === 'fit' ? 'Fit' : Math.round(scale * 100) + '%');
+                    }
+                    wrapper.find('.img-btn').on('click', function() {
+                        const action = $(this).data('action');
+                        if (action === 'zoom-in') scale = scale === 'fit' ? 1.25 : Math.min(scale * 1.25, 5.0);
+                        else if (action === 'zoom-out') scale = scale === 'fit' ? 0.75 : Math.max(scale / 1.25, 0.1);
+                        else if (action === 'fit') scale = 'fit';
+                        else if (action === 'actual') scale = 1.0;
+                        updateZoom();
+                    });
+                    updateZoom();
+                });
+            });
+
+            // Terminal component
+            layout.registerComponent('terminal', function(container, state) {
+                const termId = `term-${++terminalIdCounter}`;
+                const wrapper = $('<div class="terminal-wrapper"></div>');
+                container.getElement().append(wrapper);
+
+                const term = new Terminal({
+                    cursorBlink: true, fontSize: 14,
+                    fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                    theme: { background: '#1e1e1e', foreground: '#cccccc', cursor: '#ffffff' }
+                });
+                const fitAddon = new FitAddon.FitAddon();
+                term.loadAddon(fitAddon);
+
+                terminals.set(termId, { term, fitAddon, connected: false });
+
+                let destroyed = false;
+                container.on('open', async function() {
+                    term.open(wrapper[0]);
+                    fitAddon.fit();
+                    const result = await api.createTerminal(termId, {
+                        cols: term.cols,
+                        rows: term.rows,
+                        type: state.type || 'bash',
+                        session: state.session
+                    });
+                    // Check if component was destroyed while waiting
+                    if (destroyed) {
+                        api.closeTerminal(termId);
+                        return;
+                    }
+                    if (result.status === 'ok') {
+                        terminals.get(termId).connected = true;
+                    } else if (result.error) {
+                        term.write('\r\n\x1b[31mTerminal error: ' + result.error + '\x1b[0m\r\n');
+                    }
+                    term.focus();
+                });
+
+                term.onData(data => { if (terminals.get(termId)?.connected) api.sendTerminalInput(termId, data); });
+                container.on('resize', () => {
+                    fitAddon.fit();
+                    if (terminals.get(termId)?.connected) api.resizeTerminal(termId, term.cols, term.rows);
+                });
+                container.on('destroy', () => {
+                    destroyed = true;
+                    term.dispose();
+                    api.closeTerminal(termId);
+                    terminals.delete(termId);
+                });
+            });
+
+            // Webview component - uses Electron webview, can load ANY site!
+            layout.registerComponent('webview', function(container, state) {
+                const url = state.url || 'https://www.google.com';
+                const name = state.name || 'Web';
+
+                const wrapper = $(`
+                    <div class="webview-wrapper">
+                        <div class="webview-toolbar">
+                            <input type="text" class="webview-url" value="${url}" readonly>
+                            <button class="webview-btn" data-action="back" title="Back">◀</button>
+                            <button class="webview-btn" data-action="forward" title="Forward">▶</button>
+                            <button class="webview-btn" data-action="reload" title="Reload">↻</button>
+                        </div>
+                        <div class="webview-container">
+                            <webview src="${url}" style="width:100%;height:100%" allowpopups></webview>
+                        </div>
+                    </div>
+                `);
+                container.getElement().append(wrapper);
+
+                const webview = wrapper.find('webview')[0];
+
+                wrapper.find('.webview-btn').on('click', function() {
+                    const action = $(this).data('action');
+                    if (action === 'reload') webview.reload();
+                    else if (action === 'back') webview.goBack();
+                    else if (action === 'forward') webview.goForward();
+                });
+
+                webview.addEventListener('did-navigate', (e) => {
+                    wrapper.find('.webview-url').val(e.url);
+                });
+            });
+
+        }
+
+        // --- Terminal IPC ---
+        api.onTerminalOutput(data => {
+            const termInfo = terminals.get(data.termId);
+            if (termInfo) termInfo.term.write(data.data);
+        });
+
+        api.onTerminalClosed(data => {
+            const termInfo = terminals.get(data.termId);
+            if (termInfo) { termInfo.connected = false; termInfo.term.write('\r\n[Terminal closed]\r\n'); }
+        });
+
+        api.onDirectoryOpened(data => {
+            currentDir = data.path;
+            $('#current-dir').text(data.name);
+            loadFileTree();
+        });
+
+        // --- UI Functions ---
+        function addBashTerminal() {
+            addToLayout({ type: 'component', componentName: 'terminal', title: 'Bash', componentState: { type: 'bash' } });
+        }
+
+        async function showTmuxModal() {
+            const list = $('#session-list').empty();
+            const sessions = await api.listTmuxSessions();
+            if (sessions.length === 0) {
+                list.html('<p class="no-sessions">No tmux sessions found.</p>');
+            } else {
+                sessions.forEach(s => {
+                    $(`<div class="session-item"><span class="session-name">${s.name}</span><span class="session-info">${s.windows} window(s)</span></div>`)
+                        .on('click', () => {
+                            addToLayout({
+                                type: 'component',
+                                componentName: 'terminal',
+                                title: `tmux: ${s.name}`,
+                                componentState: { type: 'tmux', session: s.name }
+                            });
+                            $('#tmux-modal').addClass('hidden');
+                        })
+                        .appendTo(list);
+                });
+            }
+            $('#tmux-modal').removeClass('hidden');
+        }
+
+        function addWebPanel(url, name) {
+            addToLayout({ type: 'component', componentName: 'webview', title: name || 'Web', componentState: { url, name } });
+        }
+
+        // --- Event Listeners ---
+        $(document).ready(async function() {
+            // Initialize groups
+            loadGroups();
+            renderGroupTabs();
+
+            // Load active group's state (directory + layout)
+            try {
+                await loadGroupState();
+            } catch (e) {
+                console.error('Error loading group state:', e);
+                // Still initialize a default layout if loadGroupState fails
+                if (!layout) {
+                    const container = $(`<div id="layout-${activeGroupId}" class="group-layout-container" style="z-index:1;"></div>`);
+                    $('#layout-container').append(container);
+                    initLayoutWithConfig(defaultConfig, container[0]);
+                    groupLayouts.set(activeGroupId, layout);
+                }
+            }
+
+            // Window resize handler
+            $(window).on('resize', () => { if (layout) layout.updateSize(); });
+
+            // Save all state before closing
+            $(window).on('beforeunload', () => {
+                saveAllGroupStates();
+            });
+
+            // Also save periodically (every 30 seconds)
+            setInterval(saveAllGroupStates, 30000);
+
+            // Add group button
+            $('#btn-add-group').on('click', addGroup);
+
+            // Sidebar resizer
+            let isResizing = false;
+            $('#sidebar-resizer').on('mousedown', e => { isResizing = true; $('body').css('cursor', 'col-resize'); e.preventDefault(); });
+            $(document).on('mousemove', e => { if (isResizing) { $('#sidebar').css('width', Math.max(150, Math.min(500, e.clientX)) + 'px'); if (layout) layout.updateSize(); } });
+            $(document).on('mouseup', () => { if (isResizing) { isResizing = false; $('body').css('cursor', ''); } });
+
+            // Buttons
+            $('#btn-open-dir').on('click', () => {
+                renderRecentDirs();
+                $('#open-dir-modal').removeClass('hidden');
+            });
+            $('#btn-native-dialog').on('click', async () => {
+                const result = await api.openDirectoryDialog();
+                if (result) {
+                    currentDir = result.path;
+                    $('#current-dir').text(result.name);
+                    // Save to current group and recent dirs
+                    const group = groups.find(g => g.id === activeGroupId);
+                    if (group) { group.directory = result.path; saveGroups(); }
+                    addRecentDir(result.path);
+                    loadFileTree();
+                    $('#open-dir-modal').addClass('hidden');
+                }
+            });
+            $('#btn-open-dir-confirm').on('click', async () => {
+                const path = $('#dir-path-input').val().trim();
+                if (path) {
+                    const result = await api.setDirectory(path);
+                    if (result.path) {
+                        currentDir = result.path;
+                        $('#current-dir').text(result.name);
+                        // Save to current group and recent dirs
+                        const group = groups.find(g => g.id === activeGroupId);
+                        if (group) { group.directory = result.path; saveGroups(); }
+                        addRecentDir(result.path);
+                        loadFileTree();
+                        $('#open-dir-modal').addClass('hidden');
+                    } else alert('Error: ' + result.error);
+                }
+            });
+            $('#btn-open-dir-cancel').on('click', () => $('#open-dir-modal').addClass('hidden'));
+            $('#btn-refresh').on('click', () => loadFileTree());
+            $('#btn-new-bash').on('click', addBashTerminal);
+            $('#btn-new-tmux').on('click', showTmuxModal);
+            $('#btn-close-tmux-modal').on('click', () => $('#tmux-modal').addClass('hidden'));
+
+            // Web panel
+            $('#btn-new-web').on('click', () => $('#web-modal').removeClass('hidden'));
+            $('.web-preset').on('click', function() {
+                addWebPanel($(this).data('url'), $(this).data('name'));
+                $('#web-modal').addClass('hidden');
+            });
+            $('#btn-open-custom-url').on('click', () => {
+                let url = $('#web-url-input').val().trim();
+                if (url) {
+                    if (!url.match(/^https?:\/\//)) url = 'https://' + url;
+                    addWebPanel(url, new URL(url).hostname);
+                    $('#web-modal').addClass('hidden');
+                }
+            });
+            $('#btn-close-web-modal').on('click', () => $('#web-modal').addClass('hidden'));
+
+            // Close modals on background click
+            $('.modal').on('click', function(e) { if (e.target === this) $(this).addClass('hidden'); });
+        });
+    </script>
+</body>
+</html>
