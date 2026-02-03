@@ -21,7 +21,7 @@
         * { box-sizing: border-box; }
         html, body {
             margin: 0; padding: 0; height: 100%; overflow: hidden;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;
             background: #1e1e1e; color: #cccccc;
         }
 
@@ -711,6 +711,14 @@
             registerLayoutComponents();
             layout.init();
 
+            // Fit all terminals after layout is ready
+            setTimeout(() => {
+                terminals.forEach(({ term, fitAddon, connected }, termId) => {
+                    fitAddon.fit();
+                    if (connected) api.resizeTerminal(termId, term.cols, term.rows);
+                });
+            }, 200);
+
             // Save layout to localStorage on change (debounced)
             let saveLayoutTimeout;
             const groupId = activeGroupId; // Capture current group ID
@@ -810,7 +818,7 @@
                     <div class="webview-wrapper">
                         <div class="webview-toolbar">
                             <span style="color:#888;font-size:12px;">${path}</span>
-                            <button class="webview-btn" data-action="reload" title="Reload">↻</button>
+                            <button class="webview-btn" data-action="reload" title="Reload">&#x21bb;</button>
                         </div>
                         <div class="webview-container">
                             <webview style="width:100%;height:100%"></webview>
@@ -907,6 +915,9 @@
                 container.on('open', async function() {
                     term.open(wrapper[0]);
                     fitAddon.fit();
+                    // Delayed fit to ensure container is fully sized
+                    setTimeout(() => { fitAddon.fit(); }, 100);
+                    setTimeout(() => { fitAddon.fit(); }, 500);
                     const result = await api.createTerminal(termId, {
                         cols: term.cols,
                         rows: term.rows,
@@ -931,6 +942,12 @@
                     fitAddon.fit();
                     if (terminals.get(termId)?.connected) api.resizeTerminal(termId, term.cols, term.rows);
                 });
+                container.on('show', () => {
+                    setTimeout(() => {
+                        fitAddon.fit();
+                        if (terminals.get(termId)?.connected) api.resizeTerminal(termId, term.cols, term.rows);
+                    }, 50);
+                });
                 container.on('destroy', () => {
                     destroyed = true;
                     term.dispose();
@@ -948,12 +965,12 @@
                     <div class="webview-wrapper">
                         <div class="webview-toolbar">
                             <input type="text" class="webview-url" value="${url}" readonly>
-                            <button class="webview-btn" data-action="back" title="Back">◀</button>
-                            <button class="webview-btn" data-action="forward" title="Forward">▶</button>
-                            <button class="webview-btn" data-action="reload" title="Reload">↻</button>
+                            <button class="webview-btn" data-action="back" title="Back">&larr;</button>
+                            <button class="webview-btn" data-action="forward" title="Forward">&rarr;</button>
+                            <button class="webview-btn" data-action="reload" title="Reload">&#x21bb;</button>
                         </div>
                         <div class="webview-container">
-                            <webview src="${url}" style="width:100%;height:100%" allowpopups></webview>
+                            <webview src="${url}" style="width:100%;height:100%" partition="persist:webview" allowpopups></webview>
                         </div>
                     </div>
                 `);
@@ -1054,6 +1071,20 @@
 
             // Also save periodically (every 30 seconds)
             setInterval(saveAllGroupStates, 30000);
+
+            // Listen for save requests from main process (for graceful restart)
+            if (api.onSaveStateRequest) {
+                api.onSaveStateRequest(() => {
+                    console.log('Save state requested');
+                    saveAllGroupStates();
+                });
+            }
+            if (api.onSaveStateBeforeQuit) {
+                api.onSaveStateBeforeQuit(() => {
+                    console.log('Saving state before quit');
+                    saveAllGroupStates();
+                });
+            }
 
             // Add group button
             $('#btn-add-group').on('click', addGroup);

@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onDirectoryOpened: (callback) => ipcRenderer.on('directory-opened', (event, data) => callback(data)),
     onTerminalOutput: (callback) => ipcRenderer.on('terminal-output', (event, data) => callback(data)),
     onTerminalClosed: (callback) => ipcRenderer.on('terminal-closed', (event, data) => callback(data)),
+    onSaveStateRequest: (callback) => ipcRenderer.on('save-state-request', () => callback()),
+    onSaveStateBeforeQuit: (callback) => ipcRenderer.on('save-state-before-quit', () => callback()),
 
     // Utility
     isElectron: true

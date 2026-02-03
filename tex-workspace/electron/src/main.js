@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -111,6 +111,24 @@ function createMenu() {
                 { role: 'zoom' },
                 { role: 'close' }
             ]
+        },
+        {
+            label: '+Web',
+            submenu: [
+                {
+                    label: 'My Home',
+                    click: () => { shell.openExternal('http://localhost/~elinaliu/'); }
+                },
+                {
+                    label: 'ICDM Paper',
+                    click: () => { shell.openExternal('http://localhost/~elinaliu/imbalance_icdm/'); }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Claude Usage',
+                    click: () => { shell.openExternal('https://claude.ai/settings/usage'); }
+                }
+            ]
         }
     ];
 
@@ -133,6 +151,22 @@ app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
     }
+});
+
+// Handle graceful quit - tell renderer to save state first
+app.on('before-quit', (event) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('save-state-before-quit');
+    }
+});
+
+// IPC to trigger save from external script
+ipcMain.handle('force-save-state', async () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('save-state-request');
+        return { status: 'ok' };
+    }
+    return { status: 'no-window' };
 });
 
 // --- IPC Handlers ---
@@ -293,7 +327,7 @@ ipcMain.handle('create-terminal', async (event, termId, options = {}) => {
     // Determine shell command based on options
     let shell, args;
     if (options.type === 'tmux' && options.session) {
-        shell = 'tmux';
+        shell = '/opt/homebrew/bin/tmux';
         args = ['attach', '-t', options.session];
     } else {
         shell = process.env.SHELL || '/bin/bash';
@@ -367,7 +401,7 @@ ipcMain.handle('close-terminal', async (event, termId) => {
 ipcMain.handle('list-tmux-sessions', async () => {
     const { exec } = require('child_process');
     return new Promise(resolve => {
-        exec('tmux list-sessions -F "#{session_name}:#{session_windows}:#{session_attached}"', (error, stdout) => {
+        exec('/opt/homebrew/bin/tmux list-sessions -F "#{session_name}:#{session_windows}:#{session_attached}"', (error, stdout) => {
             if (error) {
                 resolve([]);
                 return;
